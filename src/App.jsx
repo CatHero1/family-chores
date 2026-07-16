@@ -127,7 +127,7 @@ const AVATAR_DECOS = [
 ];
 const NAV_ITEMS = [
   {id:'profile',icon:'👤'},{id:'main',icon:'🏠'},{id:'shop',icon:'🛍️'},
-  {id:'wishlist',icon:'🌟'},{id:'settings',icon:'⚙️'},
+  {id:'quests',icon:'🎯'},{id:'social',icon:'💬'},{id:'settings',icon:'⚙️'},
 ];
 const FONTS=[
   {id:'f0',name:'System',   css:"'Segoe UI',sans-serif"},
@@ -138,20 +138,6 @@ const FONTS=[
 ];
 const FSIZES=[{id:'sm',name:'Small',scale:.9},{id:'md',name:'Medium',scale:1},{id:'lg',name:'Large',scale:1.12}];
 const SK='fam_chores_v4';
-
-const calcStreak=(completions,userId)=>{
-  const dates=[...new Set(completions.filter(c=>c.userId===userId).map(c=>c.date))].sort().reverse();
-  if(!dates.length)return 0;
-  const today=getToday(),yest=new Date();yest.setDate(yest.getDate()-1);
-  const yStr=yest.toISOString().split('T')[0];
-  if(dates[0]!==today&&dates[0]!==yStr)return 0;
-  let streak=1;
-  for(let i=1;i<dates.length;i++){
-    const d1=new Date(dates[i-1]+'T12:00:00'),d2=new Date(dates[i]+'T12:00:00');
-    if(Math.round((d1-d2)/864e5)===1)streak++;else break;
-  }
-  return streak;
-};
 
 const ACHIEVEMENTS=[
   {id:'first_chore',  name:"First Steps!",      emoji:'🌟',desc:'Complete your first chore',       rarity:'common', check:(s)=>s.totalTasks>=1},
@@ -240,7 +226,6 @@ const GCSS=`
 @keyframes tkr{0%{transform:translateX(100vw)}100%{transform:translateX(-100%)}}
 @keyframes bg_a{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
 @keyframes th_r{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
-@keyframes slideIn{0%{transform:translateX(120%);opacity:0}100%{transform:translateX(0);opacity:1}}
 @keyframes floatUp{0%{transform:translateY(0) scale(1) rotate(0deg);opacity:1}100%{transform:translateY(-95px) scale(.2) rotate(25deg);opacity:0}}
 @keyframes rb_glow{
   0%{box-shadow:0 0 16px rgba(255,0,0,.7);border-color:#ff0000}
@@ -283,6 +268,20 @@ input,select,button{font-family:inherit}
 `;
 
 // ── Helpers ────────────────────────────────────────────────
+const calcStreak=( completions,userId)=>{
+  const dates=[...new Set(completions.filter(c=>c.userId===userId).map(c=>c.date))].sort().reverse();
+  if(!dates.length)return 0;
+  const today=getToday(),yest=new Date();yest.setDate(yest.getDate()-1);
+  const yStr=yest.toISOString().split('T')[0];
+  if(dates[0]!==today&&dates[0]!==yStr)return 0;
+  let streak=1;
+  for(let i=1;i<dates.length;i++){
+    const d1=new Date(dates[i-1]+'T12:00:00'),d2=new Date(dates[i]+'T12:00:00');
+    if(Math.round((d1-d2)/864e5)===1)streak++;else break;
+  }
+  return streak;
+};
+
 const getTier=n=>[...TIERS].reverse().find(t=>n>=t.min)||TIERS[0];
 const getToday=()=>new Date().toISOString().split('T')[0];
 const getWkSt=()=>{const d=new Date();d.setDate(d.getDate()-d.getDay());return d.toISOString().split('T')[0];};
@@ -402,7 +401,7 @@ function Sidebar({page,setPage,onClose,user,myStats,onLogout,profilePics,ownDeco
       <div onClick={onClose} style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.6)'}}/>
       <div style={{position:'absolute',left:0,top:0,bottom:0,width:264,background:'linear-gradient(180deg,#1e1b4b,#312e81)',padding:'14px 14px 18px',display:'flex',flexDirection:'column',gap:6,zIndex:901}}>
         <div style={{textAlign:'center',fontSize:11,fontWeight:800,opacity:.4,letterSpacing:3,marginBottom:10}}>MENU</div>
-        {[{id:'profile',label:'👤 My Profile'},{id:'main',label:'🏠 Main'},{id:'shop',label:'🛍️ Shop'},{id:'wishlist',label:'🌟 Wishlist'}].map(item=>(
+        {[{id:'profile',label:'👤 My Profile'},{id:'main',label:'🏠 Main'},{id:'shop',label:'🛍️ Shop'},{id:'quests',label:'🎯 Quests'},{id:'social',label:'💬 Social'},{id:'wishlist',label:'🌟 Wishlist'}].map(item=>(
           <button key={item.id} onClick={()=>setPage(item.id)} style={{background:page===item.id?'rgba(255,255,255,0.15)':'transparent',border:'1px solid rgba(255,255,255,0.08)',borderRadius:12,padding:'13px 18px',color:'white',fontSize:15,fontWeight:page===item.id?700:400,cursor:'pointer',textAlign:'left',transition:'all .15s'}}>{item.label}</button>
         ))}
         <div style={{marginTop:'auto',display:'flex',flexDirection:'column',gap:6}}>
@@ -477,16 +476,13 @@ function WeeklyChart({userId,completions,color}){
 }
 
 // ── Profile Page ─────────────────────────────────────────────
-function ProfileContent({user,myStats,completions,allChores,recurringTasks,wins,profilePics,onUploadPic,userSettingsMap,data}){
+function ProfileContent({user,myStats,completions,allChores,recurringTasks,wins,profilePics,onUploadPic,userSettingsMap}){
   const tier=getTier(myStats.totalTasks),nxt=TIERS.find(t=>t.min>myStats.totalTasks);
   const recent=[...completions].filter(c=>c.userId===user.id).reverse().slice(0,8);
   const myW=wins[user.id]||{weekly:0,monthly:0};
   const picSrc=(profilePics||{})[user.id]||null;
   const fRef=useRef(null);
   const handleFile=e=>{const f=e.target.files[0];if(!f)return;onUploadPic(user.id,f);};
-  const achStats = {};
-  if(myStats) achStats[user.id] = myStats;
-  const myStreak = calcStreak(completions, user.id);
   const deco=getDecoClass(gUS({userSettings:userSettingsMap||{}},user.id));
   return(
     <div style={{padding:20,maxWidth:520,margin:'0 auto'}}>
@@ -525,10 +521,7 @@ function ProfileContent({user,myStats,completions,allChores,recurringTasks,wins,
           {TIERS.map(t=>{const ok=myStats.totalTasks>=t.min;return(<div key={t.name} style={{flex:1,minWidth:48,textAlign:'center',padding:'8px 2px',borderRadius:10,background:ok?t.bg:'rgba(255,255,255,0.02)',border:`1px solid ${ok?t.color:'rgba(255,255,255,0.06)'}`,opacity:ok?1:.35}}><div style={{fontSize:17}}>{t.emoji}</div><div style={{fontSize:9,marginTop:2,color:ok?t.color:'white',fontWeight:700}}>{t.name}</div><div style={{fontSize:9,opacity:.5}}>{t.min}+</div></div>);})}
         </div>
       </Card>
-      {recent.length>0&&<Card title="Recent Activity" style={{marginBottom:14}}><div style={{display:'flex',flexDirection:'column'}}>{recent.map((c,i)=>{const ch=[...allChores,...recurringTasks].find(x=>x.id===c.choreId)||{name:'Task',emoji:'✅'};return(<div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',borderBottom:'1px solid rgba(255,255,255,0.05)',fontSize:13}}><span>{ch.emoji}</span><span style={{flex:1}}>{ch.name}</span><span style={{color:'#fbbf24',fontWeight:700}}>+{c.points}</span><span style={{opacity:.4,fontSize:11}}>{c.date}</span></div>);})}</div></Card>}
-      <Card title="🏅 Achievements" style={{marginBottom:14}}>
-        <AchievementsGrid user={user} data={data} stats={achStats} streak={myStreak}/>
-      </Card>
+      {recent.length>0&&<Card title="Recent Activity"><div style={{display:'flex',flexDirection:'column'}}>{recent.map((c,i)=>{const ch=[...allChores,...recurringTasks].find(x=>x.id===c.choreId)||{name:'Task',emoji:'✅'};return(<div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',borderBottom:'1px solid rgba(255,255,255,0.05)',fontSize:13}}><span>{ch.emoji}</span><span style={{flex:1}}>{ch.name}</span><span style={{color:'#fbbf24',fontWeight:700}}>+{c.points}</span><span style={{opacity:.4,fontSize:11}}>{c.date}</span></div>);})}</div></Card>}
     </div>
   );
 }
@@ -593,10 +586,7 @@ function ShopContent({myStats,redemptions,user,onRedeem,onPurchaseThemeItem,onPu
             </div>
           );})}
         </div>
-        {myR.length>0&&<div>
-          <div style={{fontWeight:700,fontSize:16,marginBottom:10}}>📜 My Redemptions</div>
-          <div style={{display:'flex',flexDirection:'column',gap:6}}>{myR.map(r=><div key={r.id} style={{display:'flex',justifyContent:'space-between',padding:'10px 16px',background:'rgba(255,255,255,0.04)',borderRadius:10,fontSize:13}}><span>{r.itemName}</span><span style={{opacity:.45}}>{r.date} · -{r.cost} pts</span></div>)}</div>
-        </div>}}
+        {myR.length>0&&<><div style={{fontWeight:700,fontSize:16,marginBottom:10}}>📜 My Redemptions</div><div style={{display:'flex',flexDirection:'column',gap:6}}>{myR.map(r=><div key={r.id} style={{display:'flex',justifyContent:'space-between',padding:'10px 16px',background:'rgba(255,255,255,0.04)',borderRadius:10,fontSize:13}}><span>{r.itemName}</span><span style={{opacity:.45}}>{r.date} · -{r.cost} pts</span></div>)}</div></>}
       </>}
 
       {tab==='boosters'&&<>
@@ -794,10 +784,10 @@ function WishlistContent({user,data,update,isGuest}){
       <div style={{fontSize:22,fontWeight:800,marginBottom:4}}>🌟 Wishlist</div>
       <div style={{opacity:.5,fontSize:13,marginBottom:20}}>Suggest rewards & features · community votes decide what gets added!</div>
       <div style={{display:'flex',gap:8,marginBottom:18}}>{[['shop','🛍️ Shop Rewards'],['features','💡 Features']].map(([t,l])=><button key={t} onClick={()=>setTab(t)} style={{padding:'8px 18px',borderRadius:10,background:tab===t?'rgba(129,140,248,0.25)':'rgba(255,255,255,0.06)',border:`1px solid ${tab===t?'#818cf8':'rgba(255,255,255,0.1)'}`,color:'white',cursor:'pointer',fontWeight:tab===t?700:400,fontSize:13}}>{l}</button>)}</div>
-      {tab==='shop'&&<div>{!isGuest&&<Card title="💡 Suggest a Shop Reward" sub="Auto-added after 1 week if more Yes than No" style={{marginBottom:16}}><div style={{display:'flex',gap:8,flexWrap:'wrap'}}><input value={sf.name} onChange={e=>setSf(p=>({...p,name:e.target.value}))} placeholder="Reward name..." style={{...inp(),flex:1}}/><input type="number" value={sf.cost} onChange={e=>setSf(p=>({...p,cost:e.target.value}))} placeholder="pts" style={{...inp(),width:70}}/><button onClick={addS} style={{background:'#818cf8',border:'none',borderRadius:8,padding:'7px 16px',color:'white',cursor:'pointer',fontWeight:700}}>+ Add</button></div></Card>}
-      {pS.length===0?<div style={{textAlign:'center',opacity:.4,marginTop:40,fontSize:14}}>No shop suggestions yet 🛍️</div>:pS.map(s=><SC key={s.id} s={s} type="shopSuggestions"/>)}</div>}
-      {tab==='features'&&<div>{!isGuest&&<Card title="🔧 Request a Feature" style={{marginBottom:16}}><div style={{display:'flex',gap:8}}><input value={ff} onChange={e=>setFf(e.target.value)} placeholder="Describe your idea..." style={{...inp(),flex:1}}/><button onClick={addF} style={{background:'#818cf8',border:'none',borderRadius:8,padding:'7px 16px',color:'white',cursor:'pointer',fontWeight:700}}>+ Add</button></div></Card>}
-      {pF.length===0?<div style={{textAlign:'center',opacity:.4,marginTop:40,fontSize:14}}>No feature requests yet 💡</div>:pF.map(s=><SC key={s.id} s={s} type="featureRequests"/>)}</div>}
+      {tab==='shop'&&<>{!isGuest&&<Card title="💡 Suggest a Shop Reward" sub="Auto-added after 1 week if more Yes than No" style={{marginBottom:16}}><div style={{display:'flex',gap:8,flexWrap:'wrap'}}><input value={sf.name} onChange={e=>setSf(p=>({...p,name:e.target.value}))} placeholder="Reward name..." style={{...inp(),flex:1}}/><input type="number" value={sf.cost} onChange={e=>setSf(p=>({...p,cost:e.target.value}))} placeholder="pts" style={{...inp(),width:70}}/><button onClick={addS} style={{background:'#818cf8',border:'none',borderRadius:8,padding:'7px 16px',color:'white',cursor:'pointer',fontWeight:700}}>+ Add</button></div></Card>}
+      {pS.length===0?<div style={{textAlign:'center',opacity:.4,marginTop:40,fontSize:14}}>No shop suggestions yet 🛍️</div>:pS.map(s=><SC key={s.id} s={s} type="shopSuggestions"/>)}</>}
+      {tab==='features'&&<>{!isGuest&&<Card title="🔧 Request a Feature" style={{marginBottom:16}}><div style={{display:'flex',gap:8}}><input value={ff} onChange={e=>setFf(e.target.value)} placeholder="Describe your idea..." style={{...inp(),flex:1}}/><button onClick={addF} style={{background:'#818cf8',border:'none',borderRadius:8,padding:'7px 16px',color:'white',cursor:'pointer',fontWeight:700}}>+ Add</button></div></Card>}
+      {pF.length===0?<div style={{textAlign:'center',opacity:.4,marginTop:40,fontSize:14}}>No feature requests yet 💡</div>:pF.map(s=><SC key={s.id} s={s} type="featureRequests"/>)}</>}
     </div>
   );
 }
@@ -1177,7 +1167,7 @@ function AchievementsGrid({user,data,stats,streak}){
   const locked=ACHIEVEMENTS.filter(a=>!earned[a.id]&&!a.check(s,streak,redemptions.length,extra));
   return(
     <div>
-      {unlocked.length>0&&<div>
+      {unlocked.length>0&&<>
         <div style={{fontSize:13,fontWeight:700,color:'#34d399',marginBottom:10}}>✓ Unlocked ({unlocked.length})</div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))',gap:8,marginBottom:20}}>
           {unlocked.map(a=>{const r=RARITIES[a.rarity]||RARITIES.common;return(
@@ -1189,24 +1179,23 @@ function AchievementsGrid({user,data,stats,streak}){
             </div>
           );})}
         </div>
-      </div>}
-      {locked.length>0&&<div>
+      </>}
+      {locked.length>0&&<>
         <div style={{fontSize:13,fontWeight:700,opacity:.4,marginBottom:10}}>🔒 Locked ({locked.length})</div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))',gap:8}}>
-          {locked.map(a=>(
-            <div key={a.id} style={{...glass(),padding:'12px 10px',textAlign:'center',opacity:.35}}>
-              <div style={{fontSize:28,marginBottom:4,filter:'grayscale(1)'}}>🔒</div>
-              <div style={{fontWeight:700,fontSize:12}}>{a.name}</div>
-              <div style={{fontSize:10,opacity:.55,marginTop:2}}>{a.desc}</div>
-            </div>
-          ))}
+          {locked.map(a=><div key={a.id} style={{...glass(),padding:'12px 10px',textAlign:'center',opacity:.35}}>
+            <div style={{fontSize:28,marginBottom:4,filter:'grayscale(1)'}}>🔒</div>
+            <div style={{fontWeight:700,fontSize:12}}>{a.name}</div>
+            <div style={{fontSize:10,opacity:.55,marginTop:2}}>{a.desc}</div>
+          </div>)}
         </div>
-      </div>}
+      </>}
     </div>
   );
 }
 
-// ── Console ──────────────────────────────────────────────────
+// ── Quests Page ───────────────────────────────────────────────
+function QuestsPage({user,data,update,stats,isGuest,allChores}){
   const c=data.completions,claims=(data.questClaims||{})[user.id]||{};
   const weekKey=getWkSt();
   const claimQuest=(id,pts)=>{
@@ -1342,7 +1331,8 @@ function SocialPage({user,data,update,isGuest,profilePics,dynUsers,userSettingsM
             <input value={msg} onChange={e=>setMsg(e.target.value)} onKeyDown={e=>e.key==='Enter'&&sendMsg()} placeholder="Say something..." style={{...inp(),flex:1,minWidth:0,borderRadius:10,padding:'10px 14px'}}/>
             <button onClick={sendMsg} style={{background:'linear-gradient(135deg,#818cf8,#6366f1)',border:'none',borderRadius:10,padding:'10px 16px',color:'white',cursor:'pointer',fontWeight:700,fontSize:15,flexShrink:0}}>➤</button>
           </div>
-        ):<div style={{padding:'10px 14px',fontSize:13,opacity:.5,textAlign:'center'}}>Log in to chat</div>}      </Card>
+        ):<div style={{padding:'10px 14px',fontSize:13,opacity:.5,textAlign:'center'}}>Log in to chat</div>}
+      </Card>
     </div>
   );
 }
@@ -1586,33 +1576,8 @@ export default function App(){
     prevTiers.current[user.id]=cur;
   },[data,user]);
 
-  // Auto-unlock achievements
   useEffect(()=>{
-    if(!data||!user||user.guest)return;
-    const st=compStats(data.completions,data.redemptions,data);
-    const s=st[user.id]||{};
-    const streak=calcStreak(data.completions,user.id);
-    const redemptions=(data.redemptions||[]).filter(r=>r.userId===user.id);
-    const earned=(data.achievementsEarned||{})[user.id]||{};
-    const extra={loggedIn:true,loginStreak:(data.userSettings||{})[user.id]?.loginStreak||1,boostChore:(data.userSettings||{})[user.id]?.earnedBoostChore};
-    const newlyEarned=ACHIEVEMENTS.filter(a=>!earned[a.id]&&a.check(s,streak,redemptions.length,extra));
-    if(newlyEarned.length>0){
-      const newMap={...earned};
-      newlyEarned.forEach(a=>{newMap[a.id]=true;});
-      update(prev=>({...prev,achievementsEarned:{...(prev.achievementsEarned||{}),[user.id]:newMap}}));
-    }
-  },[data?.completions?.length,data?.redemptions?.length,user?.id]);
-
-  // Track booster chore achievement
-  useEffect(()=>{
-    if(!data||!user||user.guest)return;
-    const ab=getActiveBst(data);
-    const t=getToday();
-    if(ab&&data.completions.some(c=>c.userId===user.id&&c.date===t)){
-      const already=(data.userSettings||{})[user.id]?.earnedBoostChore;
-      if(!already) update(prev=>({...prev,userSettings:{...(prev.userSettings||{}),[user.id]:{...gUS(prev,user.id),earnedBoostChore:true}}}));
-    }
-  },[data?.completions?.length]);useEffect(()=>{let changed=false;const nD=[...(data.dynamicShopItems||[])];
+    if(!data?.wishlist)return;let changed=false;const nD=[...(data.dynamicShopItems||[])];
     const nS=(data.wishlist.shopSuggestions||[]).map(s=>{if(s.status!=='pending'||daysSince(s.createdAt)<7)return s;const votes=Object.values(s.votes);if(!votes.length)return s;changed=true;const yes=votes.filter(v=>v==='y').length,no=votes.filter(v=>v==='n').length;if(yes>no)nD.push({id:`ds_${s.id}`,name:s.name,emoji:'⭐',cost:s.cost,desc:'Suggested by the family!'});return{...s,status:yes>no?'added':'rejected'};});
     const nF=(data.wishlist.featureRequests||[]).map(f=>{if(f.status!=='pending'||daysSince(f.createdAt)<7)return f;const votes=Object.values(f.votes);if(!votes.length)return f;changed=true;return{...f,status:votes.filter(v=>v==='y').length>votes.length/2?'approved':'rejected'};});
     if(changed)update(()=>({...data,wishlist:{shopSuggestions:nS,featureRequests:nF},dynamicShopItems:nD}));
@@ -1751,7 +1716,7 @@ export default function App(){
   const medals=['🥇','🥈','🥉'];
   const doSetPage=p=>{setPage(p);setSidebar(false);};
   const doLogout=()=>{setUser(null);setSidebar(false);setPage('main');};
-  const pageTitles={main:'Family Chore Tracker',shop:'Rewards Shop',profile:'My Profile',console:'Admin Console',wishlist:'Wishlist',settings:'Settings'};
+  const pageTitles={main:'Family Chore Tracker',shop:'Rewards Shop',profile:'My Profile',console:'Admin Console',wishlist:'Wishlist',settings:'Settings',quests:'Quests',social:'Social'};
   const spProps={allChores,recurringTasks:data.recurringTasks,user,isGuest,isDoneToday,whoDidToday,toggleChore,completeRecurring,tc,onAnim:spawnParticles};
   const bpProps={user,isGuest,lbMode,setLbMode,lb,stats,medals,setViewProfile,nudge,setNudge,sendNudge,sugg,setSugg,addSugg,pendingSuggs:pendSuggs,voteVals,setVoteVals,vote,profilePics,userSettingsMap};
   const appStyle={minHeight:'100vh',color:'white',fontFamily:appFont,fontSize:`${appScale}rem`,display:'flex',flexDirection:'column',height:'100vh',overflow:'hidden',...(customBg?{backgroundImage:`url(${customBg.imageData})`,backgroundSize:'cover',backgroundPosition:'center'}:bgEntry?.css?{background:bgEntry.css}:{})};
@@ -1769,10 +1734,12 @@ export default function App(){
       {isGuest&&<div style={{background:'rgba(148,163,184,0.13)',borderBottom:'1px solid rgba(148,163,184,0.2)',padding:'6px 18px',display:'flex',alignItems:'center',gap:8,fontSize:12,color:'#94a3b8',flexShrink:0}}>👁️ <strong>View-Only</strong> — Log in to earn points!</div>}
       <Header onMenu={()=>setSidebar(true)} user={user} myStats={myStats} setPage={p=>{setPage(p);setSidebar(false);}} title={pageTitles[page]||''} profilePics={profilePics} settings={settings} page={page} activeBooster={activeBst} ownDecoClass={ownDecoClass} syncStatus={syncStatus} streak={calcStreak(data.completions,user.id)}/>
       <div style={{flex:1,overflowY:'auto',WebkitOverflowScrolling:'touch'}}>
-        {page==='profile'&&(isGuest?<GuestProfile/>:<ProfileContent user={user} myStats={myStats} completions={data.completions} allChores={allChores} recurringTasks={data.recurringTasks} wins={data.wins||{}} profilePics={profilePics} onUploadPic={onUploadPic} userSettingsMap={userSettingsMap} data={data}/>)}
+        {page==='profile'&&(isGuest?<GuestProfile/>:<ProfileContent user={user} myStats={myStats} completions={data.completions} allChores={allChores} recurringTasks={data.recurringTasks} wins={data.wins||{}} profilePics={profilePics} onUploadPic={onUploadPic} userSettingsMap={userSettingsMap}/>)}
         {page==='shop'&&<ShopContent myStats={myStats} redemptions={data.redemptions} user={user} onRedeem={redeem} onPurchaseThemeItem={purchaseThemeItem} onPurchaseBooster={purchaseBooster} shopMsg={shopMsg} isGuest={isGuest} data={data} onPreview={setPreviewMode}/>}
         {page==='settings'&&<SettingsContent user={user} data={data} updateSettings={updateSettings} gotoShop={()=>doSetPage('shop')}/>}
         {page==='wishlist'&&<WishlistContent user={user} data={data} update={update} isGuest={isGuest}/>}
+        {page==='quests'&&<QuestsPage user={user} data={data} update={update} stats={stats} isGuest={isGuest} allChores={allChores}/>}
+        {page==='social'&&<SocialPage user={user} data={data} update={update} isGuest={isGuest} profilePics={profilePics} dynUsers={dynUsers} userSettingsMap={userSettingsMap}/>}
         {page==='console'&&user.admin&&<ConsolePage data={data} update={update}/>}
         {page==='main'&&(isMobile?(
           <div style={{display:'flex',flexDirection:'column',height:'100%'}}>
