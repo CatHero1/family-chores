@@ -596,7 +596,7 @@ function ShopContent({myStats,redemptions,user,onRedeem,onPurchaseThemeItem,onPu
         {myR.length>0&&<div>
           <div style={{fontWeight:700,fontSize:16,marginBottom:10}}>📜 My Redemptions</div>
           <div style={{display:'flex',flexDirection:'column',gap:6}}>{myR.map(r=><div key={r.id} style={{display:'flex',justifyContent:'space-between',padding:'10px 16px',background:'rgba(255,255,255,0.04)',borderRadius:10,fontSize:13}}><span>{r.itemName}</span><span style={{opacity:.45}}>{r.date} · -{r.cost} pts</span></div>)}</div>
-        </div>}}
+        </div>}
       </>}
 
       {tab==='boosters'&&<>
@@ -1206,7 +1206,8 @@ function AchievementsGrid({user,data,stats,streak}){
   );
 }
 
-// ── Console ──────────────────────────────────────────────────
+// ── Quests ─────────────────────────────────────────────────────
+function QuestsPage({user,data,isGuest,stats,update}){
   const c=data.completions,claims=(data.questClaims||{})[user.id]||{};
   const weekKey=getWkSt();
   const claimQuest=(id,pts)=>{
@@ -1612,7 +1613,9 @@ export default function App(){
       const already=(data.userSettings||{})[user.id]?.earnedBoostChore;
       if(!already) update(prev=>({...prev,userSettings:{...(prev.userSettings||{}),[user.id]:{...gUS(prev,user.id),earnedBoostChore:true}}}));
     }
-  },[data?.completions?.length]);useEffect(()=>{let changed=false;const nD=[...(data.dynamicShopItems||[])];
+  },[data?.completions?.length]);useEffect(()=>{
+    if(!data)return;
+    let changed=false;const nD=[...(data.dynamicShopItems||[])];
     const nS=(data.wishlist.shopSuggestions||[]).map(s=>{if(s.status!=='pending'||daysSince(s.createdAt)<7)return s;const votes=Object.values(s.votes);if(!votes.length)return s;changed=true;const yes=votes.filter(v=>v==='y').length,no=votes.filter(v=>v==='n').length;if(yes>no)nD.push({id:`ds_${s.id}`,name:s.name,emoji:'⭐',cost:s.cost,desc:'Suggested by the family!'});return{...s,status:yes>no?'added':'rejected'};});
     const nF=(data.wishlist.featureRequests||[]).map(f=>{if(f.status!=='pending'||daysSince(f.createdAt)<7)return f;const votes=Object.values(f.votes);if(!votes.length)return f;changed=true;return{...f,status:votes.filter(v=>v==='y').length>votes.length/2?'approved':'rejected'};});
     if(changed)update(()=>({...data,wishlist:{shopSuggestions:nS,featureRequests:nF},dynamicShopItems:nD}));
