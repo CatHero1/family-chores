@@ -35,7 +35,8 @@ const BASE_SHOP_ITEMS = [
   {id:'s4',name:'1 hour extra screen time',   emoji:'🎮',cost:80, desc:"Level up your gaming session!"},
   {id:'s5',name:'Choose dinner for the night',emoji:'🍕',cost:100,desc:"You're the chef of decisions!"},
   {id:'s6',name:'Assign a chore to someone',  emoji:'👑',cost:150,desc:"Delegate like a boss!"},
-  {id:'s7',name:'Family Restaurant Visit',    emoji:'🍽️',cost:500,desc:"The ultimate family outing!",boss:true},
+  {id:'s7',name:'Streak Saver',               emoji:'🛡️',cost:75, desc:"Restore a broken streak instantly!",streakSaver:true},
+  {id:'s8',name:'Family Restaurant Visit',    emoji:'🍽️',cost:500,desc:"The ultimate family outing!",boss:true},
 ];
 const BASE_RECURRING = [
   {id:'r1',name:'Replace cat water', dayOfMonth:7, points:10,emoji:'🐱',frequency:'monthly'},
@@ -138,10 +139,108 @@ const FONTS=[
 const FSIZES=[{id:'sm',name:'Small',scale:.9},{id:'md',name:'Medium',scale:1},{id:'lg',name:'Large',scale:1.12}];
 const SK='fam_chores_v4';
 
+const calcStreak=(completions,userId)=>{
+  const dates=[...new Set(completions.filter(c=>c.userId===userId).map(c=>c.date))].sort().reverse();
+  if(!dates.length)return 0;
+  const today=getToday(),yest=new Date();yest.setDate(yest.getDate()-1);
+  const yStr=yest.toISOString().split('T')[0];
+  if(dates[0]!==today&&dates[0]!==yStr)return 0;
+  let streak=1;
+  for(let i=1;i<dates.length;i++){
+    const d1=new Date(dates[i-1]+'T12:00:00'),d2=new Date(dates[i]+'T12:00:00');
+    if(Math.round((d1-d2)/864e5)===1)streak++;else break;
+  }
+  return streak;
+};
+
+const ACHIEVEMENTS=[
+  {id:'first_chore',  name:"First Steps!",      emoji:'🌟',desc:'Complete your first chore',       rarity:'common', check:(s)=>s.totalTasks>=1},
+  {id:'chores_5',     name:'Getting Started',    emoji:'⭐',desc:'Complete 5 chores',              rarity:'common', check:(s)=>s.totalTasks>=5},
+  {id:'chores_10',    name:'Hard Worker',        emoji:'💪',desc:'Complete 10 chores',             rarity:'common', check:(s)=>s.totalTasks>=10},
+  {id:'chores_25',    name:'On a Roll',          emoji:'🔥',desc:'Complete 25 chores',             rarity:'rare',   check:(s)=>s.totalTasks>=25},
+  {id:'chores_50',    name:'Half Century',       emoji:'🏅',desc:'Complete 50 chores',             rarity:'rare',   check:(s)=>s.totalTasks>=50},
+  {id:'chores_100',   name:'Century Club',       emoji:'🏆',desc:'Complete 100 chores',            rarity:'epic',   check:(s)=>s.totalTasks>=100},
+  {id:'points_100',   name:'Century Points',     emoji:'💯',desc:'Earn 100 total points',          rarity:'common', check:(s)=>s.totalPoints>=100},
+  {id:'points_500',   name:'High Roller',        emoji:'💎',desc:'Earn 500 total points',          rarity:'rare',   check:(s)=>s.totalPoints>=500},
+  {id:'points_1000',  name:'Thousandaire',       emoji:'👑',desc:'Earn 1,000 total points',        rarity:'epic',   check:(s)=>s.totalPoints>=1000},
+  {id:'streak_3',     name:'Hat Trick',          emoji:'🎯',desc:'Maintain a 3-day streak',        rarity:'common', check:(s,streak)=>streak>=3},
+  {id:'streak_7',     name:'Week Warrior',       emoji:'⚡',desc:'Maintain a 7-day streak',        rarity:'rare',   check:(s,streak)=>streak>=7},
+  {id:'streak_14',    name:'Unstoppable',        emoji:'💥',desc:'Maintain a 14-day streak',       rarity:'epic',   check:(s,streak)=>streak>=14},
+  {id:'first_buy',    name:'Window Shopper',     emoji:'🛍️',desc:'Make your first shop purchase',  rarity:'common', check:(s,streak,r)=>r>=1},
+  {id:'buy_5',        name:'Big Spender',        emoji:'💸',desc:'Make 5 shop purchases',          rarity:'rare',   check:(s,streak,r)=>r>=5},
+  {id:'buy_10',       name:'Shop Addict',        emoji:'🤑',desc:'Make 10 shop purchases',         rarity:'epic',   check:(s,streak,r)=>r>=10},
+  {id:'tier_gold',    name:'Golden Age',         emoji:'🥇',desc:'Reach Gold tier (50 tasks)',     rarity:'rare',   check:(s)=>s.totalTasks>=50},
+  {id:'tier_obsidian',name:'Legendary',          emoji:'🖤',desc:'Reach Obsidian tier (125 tasks)',rarity:'epic',   check:(s)=>s.totalTasks>=125},
+  {id:'boost_used',   name:'Power Surge',        emoji:'⚡',desc:'Complete a chore during a booster',rarity:'rare', check:(s,streak,r,extra)=>!!extra?.boostChore},
+  {id:'first_login',  name:'Welcome Home',       emoji:'🏠',desc:'Log in for the first time',      rarity:'common', check:(s,streak,r,extra)=>!!extra?.loggedIn},
+  {id:'login_7',      name:'Regular',            emoji:'📅',desc:'Log in 7 days in a row',         rarity:'rare',   check:(s,streak,r,extra)=>(extra?.loginStreak||0)>=7},
+];
+
+const RARITIES={common:{color:'#94a3b8',label:'Common'},rare:{color:'#818cf8',label:'Rare'},epic:{color:'#a855f7',label:'Epic'}};
+
+const PERSONAL_QUESTS=[
+  {id:'qp1',name:'Power Day',      emoji:'⚡',desc:'Complete 5 chores in one day',                pts:30,check:(c,uid)=>{const t=getToday();return c.filter(x=>x.userId===uid&&x.date===t).length>=5;}},
+  {id:'qp2',name:'3-Day Warrior',  emoji:'🔥',desc:'Maintain a 3-day streak',                    pts:50,check:(c,uid)=>calcStreak(c,uid)>=3},
+  {id:'qp3',name:'Variety Pack',   emoji:'🎨',desc:'Complete 6 different chores this week',      pts:40,check:(c,uid)=>{const ws=getWkSt();return new Set(c.filter(x=>x.userId===uid&&x.date>=ws).map(x=>x.choreId)).size>=6;}},
+  {id:'qp4',name:'Point Hoarder',  emoji:'💰',desc:'Earn 150 points this week',                  pts:25,check:(c,uid,stats)=>(stats[uid]?.weeklyPoints||0)>=150},
+  {id:'qp5',name:'Clean Freak',    emoji:'🧹',desc:'Complete 3 chores 3 days in a row',          pts:60,check:(c,uid)=>{const ws=getWkSt();const byDate={};c.filter(x=>x.userId===uid&&x.date>=ws).forEach(x=>{byDate[x.date]=(byDate[x.date]||0)+1;});const days=Object.keys(byDate).filter(d=>byDate[d]>=3).sort();let streak=1;for(let i=1;i<days.length;i++){const d=Math.round((new Date(days[i])-new Date(days[i-1]))/864e5);if(d===1)streak++;else streak=1;if(streak>=3)return true;}return streak>=3;}},
+];
+
+const FAMILY_QUESTS=[
+  {id:'qf1',name:'Family Strong',      emoji:'👨‍👩‍👧',desc:'50 chores completed as a family this week', pts:20,target:50, progress:(c)=>{const ws=getWkSt();return c.filter(x=>x.date>=ws).length;},  check:(c)=>{const ws=getWkSt();return c.filter(x=>x.date>=ws).length>=50;}},
+  {id:'qf2',name:'All Hands on Deck',  emoji:'🙌',desc:'Everyone completes at least 1 chore this week',pts:30,target:null,progress:(c,data)=>{const ws=getWkSt();return getFam(data).filter(u=>c.some(x=>x.userId===u.id&&x.date>=ws)).length;},check:(c,data)=>{const ws=getWkSt();return getFam(data).every(u=>c.some(x=>x.userId===u.id&&x.date>=ws));}},
+  {id:'qf3',name:'Family Fortune',     emoji:'⭐',desc:'Family earns 500 points this week',           pts:15,target:500,progress:(c)=>{const ws=getWkSt();return c.filter(x=>x.date>=ws).reduce((s,x)=>s+x.points,0);},check:(c)=>{const ws=getWkSt();return c.filter(x=>x.date>=ws).reduce((s,x)=>s+x.points,0)>=500;}},
+  {id:'qf4',name:'Diversity Award',    emoji:'🌈',desc:'10 different chores completed this week',      pts:25,target:10, progress:(c)=>{const ws=getWkSt();return new Set(c.filter(x=>x.date>=ws).map(x=>x.choreId)).size;},check:(c)=>{const ws=getWkSt();return new Set(c.filter(x=>x.date>=ws).map(x=>x.choreId)).size>=10;}},
+];
+
+// Image compression for profile pics and custom backgrounds
+const compressImage=(file,maxDim=240)=>new Promise(res=>{
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const img=new Image();
+    img.onload=()=>{
+      const scale=Math.min(maxDim/img.width,maxDim/img.height,1);
+      const canvas=document.createElement('canvas');
+      canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);
+      canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+      res(canvas.toDataURL('image/jpeg',0.75));
+    };
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+// ── Supabase sync ─────────────────────────────────────────────
+const SB_URL='https://xbkfbdpmkejvodyxhmoq.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhia2ZiZHBta2Vqdm9keXhobW9xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQyMTMzODUsImV4cCI6MjA5OTc4OTM4NX0.06vqP0mLXBB1UGzSV3m3RQJmooSnIiHq9vAj1ozPl_I';
+const SB_HDR={'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`,'Content-Type':'application/json'};
+const USE_SB=typeof window.storage==='undefined'; // use Supabase in real website, window.storage in Claude preview
+
+const sbLoad=async()=>{
+  try{
+    const r=await fetch(`${SB_URL}/rest/v1/app_state?id=eq.1&select=data,updated_at`,{headers:SB_HDR});
+    if(!r.ok)return null;
+    const rows=await r.json();
+    return rows[0]||null;
+  }catch{return null;}
+};
+const sbSave=async(data,syncedRef)=>{
+  try{
+    const now=new Date().toISOString();
+    const body=JSON.stringify({data,updated_at:now});
+    const r=await fetch(`${SB_URL}/rest/v1/app_state?id=eq.1`,{method:'PATCH',headers:{...SB_HDR,'Prefer':'return=minimal'},body});
+    if(r.status===404||r.status===406){
+      await fetch(`${SB_URL}/rest/v1/app_state`,{method:'POST',headers:{...SB_HDR,'Prefer':'return=minimal'},body:JSON.stringify({id:1,data,updated_at:now})});
+    }
+    if(syncedRef)syncedRef.current=now;
+  }catch(e){console.error('Sync error:',e);}
+};
+
 const GCSS=`
 @keyframes tkr{0%{transform:translateX(100vw)}100%{transform:translateX(-100%)}}
 @keyframes bg_a{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
 @keyframes th_r{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+@keyframes slideIn{0%{transform:translateX(120%);opacity:0}100%{transform:translateX(0);opacity:1}}
 @keyframes floatUp{0%{transform:translateY(0) scale(1) rotate(0deg);opacity:1}100%{transform:translateY(-95px) scale(.2) rotate(25deg);opacity:0}}
 @keyframes rb_glow{
   0%{box-shadow:0 0 16px rgba(255,0,0,.7);border-color:#ff0000}
@@ -226,9 +325,9 @@ const initData=()=>({
   profilePics:{},purchases:{},userSettings:{},
   wishlist:{shopSuggestions:[],featureRequests:[]},
   dynamicShopItems:[],customBackgrounds:[],dynamicUsers:[],boosters:[],
-  loginMode:'simple',
+  loginMode:'simple',chat:[],questClaims:{},streakSavers:{},achievementsEarned:{},
 });
-const migrate=d=>({...initData(),...d,wins:d.wins||{},lastWeekChecked:d.lastWeekChecked||null,lastMonthChecked:d.lastMonthChecked||null,choreOverrides:d.choreOverrides||{},profilePics:d.profilePics||{},purchases:d.purchases||{},userSettings:d.userSettings||{},wishlist:d.wishlist||{shopSuggestions:[],featureRequests:[]},dynamicShopItems:d.dynamicShopItems||[],customBackgrounds:d.customBackgrounds||[],dynamicUsers:d.dynamicUsers||[],boosters:d.boosters||[],recurringTasks:(d.recurringTasks||BASE_RECURRING).map(t=>({frequency:'monthly',...t})),loginMode:d.loginMode||'simple'});
+const migrate=d=>({...initData(),...d,wins:d.wins||{},lastWeekChecked:d.lastWeekChecked||null,lastMonthChecked:d.lastMonthChecked||null,choreOverrides:d.choreOverrides||{},profilePics:d.profilePics||{},purchases:d.purchases||{},userSettings:d.userSettings||{},wishlist:d.wishlist||{shopSuggestions:[],featureRequests:[]},dynamicShopItems:d.dynamicShopItems||[],customBackgrounds:d.customBackgrounds||[],dynamicUsers:d.dynamicUsers||[],boosters:d.boosters||[],recurringTasks:(d.recurringTasks||BASE_RECURRING).map(t=>({frequency:'monthly',...t})),loginMode:d.loginMode||'simple',chat:d.chat||[],questClaims:d.questClaims||{},streakSavers:d.streakSavers||{},achievementsEarned:d.achievementsEarned||{}});
 
 const glass=(x={})=>({background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.09)',borderRadius:16,...x});
 const inp=(x={})=>({background:'rgba(255,255,255,0.08)',border:'1px solid rgba(255,255,255,0.15)',borderRadius:8,padding:'6px 10px',color:'white',fontSize:13,outline:'none',boxSizing:'border-box',...x});
@@ -321,10 +420,11 @@ function Sidebar({page,setPage,onClose,user,myStats,onLogout,profilePics,ownDeco
 }
 
 // ── Header ──────────────────────────────────────────────────
-function Header({onMenu,user,myStats,setPage,title,profilePics,settings,page,activeBooster,ownDecoClass}){
+function Header({onMenu,user,myStats,setPage,title,profilePics,settings,page,activeBooster,ownDecoClass,syncStatus,streak}){
   const tier=getTier(myStats.totalTasks);
   const navItems=[...NAV_ITEMS,...(user.admin?[{id:'console',icon:'🔧'}]:[])];
   const bLeft=activeBooster?Math.max(0,Math.ceil((activeBooster.expiresAt-Date.now())/864e5)):0;
+  const syncDot=syncStatus==='saving'?{bg:'rgba(251,191,36,0.2)',border:'rgba(251,191,36,0.5)',color:'#fbbf24',label:'Syncing…'}:syncStatus==='error'?{bg:'rgba(239,68,68,0.2)',border:'rgba(239,68,68,0.4)',color:'#f87171',label:'Sync error'}:{bg:'rgba(52,211,153,0.15)',border:'rgba(52,211,153,0.35)',color:'#34d399',label:'Synced'};
   return(
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',borderBottom:'1px solid rgba(255,255,255,0.08)',flexShrink:0,position:'relative',gap:8}}>
       <HamBtn onClick={onMenu}/>
@@ -345,6 +445,8 @@ function Header({onMenu,user,myStats,setPage,title,profilePics,settings,page,act
       )}
       <div style={{display:'flex',alignItems:'center',gap:7,marginLeft:'auto'}}>
         {activeBooster&&<div title={`${bLeft}d remaining · ${activeBooster.multiplier}x for everyone`} style={{background:'rgba(251,191,36,0.12)',border:'1px solid rgba(251,191,36,0.4)',borderRadius:10,padding:'4px 10px',fontSize:13,fontWeight:800,color:'#fbbf24',cursor:'default',boxShadow:'0 0 14px rgba(251,191,36,0.3)',whiteSpace:'nowrap'}}>✨ {activeBooster.multiplier}x ✨</div>}
+        {!user.guest&&streak>0&&<div title={`${streak}-day streak!`} style={{background:'rgba(251,146,60,0.14)',border:'1px solid rgba(251,146,60,0.35)',borderRadius:10,padding:'4px 10px',fontSize:13,fontWeight:800,color:'#fb923c',cursor:'default',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:4}}>🔥{streak}</div>}
+        {USE_SB&&<div title={syncDot.label} style={{width:8,height:8,borderRadius:'50%',background:syncDot.color,boxShadow:`0 0 6px ${syncDot.color}`,flexShrink:0,border:`1px solid ${syncDot.border}`}}/>}
         <button onClick={()=>setPage('settings')} style={{background:'rgba(255,255,255,0.08)',border:'none',borderRadius:8,width:32,height:32,cursor:'pointer',fontSize:16,color:'white',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>⚙️</button>
         {user.guest?(<div style={{textAlign:'right'}}><div style={{fontWeight:700,fontSize:14,color:'#94a3b8'}}>Guest</div><div style={{fontSize:10,opacity:.45}}>View only</div></div>):(
           <div style={{textAlign:'right'}}>
@@ -375,13 +477,16 @@ function WeeklyChart({userId,completions,color}){
 }
 
 // ── Profile Page ─────────────────────────────────────────────
-function ProfileContent({user,myStats,completions,allChores,recurringTasks,wins,profilePics,onUploadPic,userSettingsMap}){
+function ProfileContent({user,myStats,completions,allChores,recurringTasks,wins,profilePics,onUploadPic,userSettingsMap,data}){
   const tier=getTier(myStats.totalTasks),nxt=TIERS.find(t=>t.min>myStats.totalTasks);
   const recent=[...completions].filter(c=>c.userId===user.id).reverse().slice(0,8);
   const myW=wins[user.id]||{weekly:0,monthly:0};
   const picSrc=(profilePics||{})[user.id]||null;
   const fRef=useRef(null);
-  const handleFile=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>onUploadPic(user.id,ev.target.result);r.readAsDataURL(f);};
+  const handleFile=e=>{const f=e.target.files[0];if(!f)return;onUploadPic(user.id,f);};
+  const achStats = {};
+  if(myStats) achStats[user.id] = myStats;
+  const myStreak = calcStreak(completions, user.id);
   const deco=getDecoClass(gUS({userSettings:userSettingsMap||{}},user.id));
   return(
     <div style={{padding:20,maxWidth:520,margin:'0 auto'}}>
@@ -420,7 +525,10 @@ function ProfileContent({user,myStats,completions,allChores,recurringTasks,wins,
           {TIERS.map(t=>{const ok=myStats.totalTasks>=t.min;return(<div key={t.name} style={{flex:1,minWidth:48,textAlign:'center',padding:'8px 2px',borderRadius:10,background:ok?t.bg:'rgba(255,255,255,0.02)',border:`1px solid ${ok?t.color:'rgba(255,255,255,0.06)'}`,opacity:ok?1:.35}}><div style={{fontSize:17}}>{t.emoji}</div><div style={{fontSize:9,marginTop:2,color:ok?t.color:'white',fontWeight:700}}>{t.name}</div><div style={{fontSize:9,opacity:.5}}>{t.min}+</div></div>);})}
         </div>
       </Card>
-      {recent.length>0&&<Card title="Recent Activity"><div style={{display:'flex',flexDirection:'column'}}>{recent.map((c,i)=>{const ch=[...allChores,...recurringTasks].find(x=>x.id===c.choreId)||{name:'Task',emoji:'✅'};return(<div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',borderBottom:'1px solid rgba(255,255,255,0.05)',fontSize:13}}><span>{ch.emoji}</span><span style={{flex:1}}>{ch.name}</span><span style={{color:'#fbbf24',fontWeight:700}}>+{c.points}</span><span style={{opacity:.4,fontSize:11}}>{c.date}</span></div>);})}</div></Card>}
+      {recent.length>0&&<Card title="Recent Activity" style={{marginBottom:14}}><div style={{display:'flex',flexDirection:'column'}}>{recent.map((c,i)=>{const ch=[...allChores,...recurringTasks].find(x=>x.id===c.choreId)||{name:'Task',emoji:'✅'};return(<div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',borderBottom:'1px solid rgba(255,255,255,0.05)',fontSize:13}}><span>{ch.emoji}</span><span style={{flex:1}}>{ch.name}</span><span style={{color:'#fbbf24',fontWeight:700}}>+{c.points}</span><span style={{opacity:.4,fontSize:11}}>{c.date}</span></div>);})}</div></Card>}
+      <Card title="🏅 Achievements" style={{marginBottom:14}}>
+        <AchievementsGrid user={user} data={data} stats={achStats} streak={myStreak}/>
+      </Card>
     </div>
   );
 }
@@ -485,7 +593,10 @@ function ShopContent({myStats,redemptions,user,onRedeem,onPurchaseThemeItem,onPu
             </div>
           );})}
         </div>
-        {myR.length>0&&<><div style={{fontWeight:700,fontSize:16,marginBottom:10}}>📜 My Redemptions</div><div style={{display:'flex',flexDirection:'column',gap:6}}>{myR.map(r=><div key={r.id} style={{display:'flex',justifyContent:'space-between',padding:'10px 16px',background:'rgba(255,255,255,0.04)',borderRadius:10,fontSize:13}}><span>{r.itemName}</span><span style={{opacity:.45}}>{r.date} · -{r.cost} pts</span></div>)}</div></>}
+        {myR.length>0&&<div>
+          <div style={{fontWeight:700,fontSize:16,marginBottom:10}}>📜 My Redemptions</div>
+          <div style={{display:'flex',flexDirection:'column',gap:6}}>{myR.map(r=><div key={r.id} style={{display:'flex',justifyContent:'space-between',padding:'10px 16px',background:'rgba(255,255,255,0.04)',borderRadius:10,fontSize:13}}><span>{r.itemName}</span><span style={{opacity:.45}}>{r.date} · -{r.cost} pts</span></div>)}</div>
+        </div>}}
       </>}
 
       {tab==='boosters'&&<>
@@ -683,10 +794,10 @@ function WishlistContent({user,data,update,isGuest}){
       <div style={{fontSize:22,fontWeight:800,marginBottom:4}}>🌟 Wishlist</div>
       <div style={{opacity:.5,fontSize:13,marginBottom:20}}>Suggest rewards & features · community votes decide what gets added!</div>
       <div style={{display:'flex',gap:8,marginBottom:18}}>{[['shop','🛍️ Shop Rewards'],['features','💡 Features']].map(([t,l])=><button key={t} onClick={()=>setTab(t)} style={{padding:'8px 18px',borderRadius:10,background:tab===t?'rgba(129,140,248,0.25)':'rgba(255,255,255,0.06)',border:`1px solid ${tab===t?'#818cf8':'rgba(255,255,255,0.1)'}`,color:'white',cursor:'pointer',fontWeight:tab===t?700:400,fontSize:13}}>{l}</button>)}</div>
-      {tab==='shop'&&<>{!isGuest&&<Card title="💡 Suggest a Shop Reward" sub="Auto-added after 1 week if more Yes than No" style={{marginBottom:16}}><div style={{display:'flex',gap:8,flexWrap:'wrap'}}><input value={sf.name} onChange={e=>setSf(p=>({...p,name:e.target.value}))} placeholder="Reward name..." style={{...inp(),flex:1}}/><input type="number" value={sf.cost} onChange={e=>setSf(p=>({...p,cost:e.target.value}))} placeholder="pts" style={{...inp(),width:70}}/><button onClick={addS} style={{background:'#818cf8',border:'none',borderRadius:8,padding:'7px 16px',color:'white',cursor:'pointer',fontWeight:700}}>+ Add</button></div></Card>}
-      {pS.length===0?<div style={{textAlign:'center',opacity:.4,marginTop:40,fontSize:14}}>No shop suggestions yet 🛍️</div>:pS.map(s=><SC key={s.id} s={s} type="shopSuggestions"/>)}</>}
-      {tab==='features'&&<>{!isGuest&&<Card title="🔧 Request a Feature" style={{marginBottom:16}}><div style={{display:'flex',gap:8}}><input value={ff} onChange={e=>setFf(e.target.value)} placeholder="Describe your idea..." style={{...inp(),flex:1}}/><button onClick={addF} style={{background:'#818cf8',border:'none',borderRadius:8,padding:'7px 16px',color:'white',cursor:'pointer',fontWeight:700}}>+ Add</button></div></Card>}
-      {pF.length===0?<div style={{textAlign:'center',opacity:.4,marginTop:40,fontSize:14}}>No feature requests yet 💡</div>:pF.map(s=><SC key={s.id} s={s} type="featureRequests"/>)}</>}
+      {tab==='shop'&&<div>{!isGuest&&<Card title="💡 Suggest a Shop Reward" sub="Auto-added after 1 week if more Yes than No" style={{marginBottom:16}}><div style={{display:'flex',gap:8,flexWrap:'wrap'}}><input value={sf.name} onChange={e=>setSf(p=>({...p,name:e.target.value}))} placeholder="Reward name..." style={{...inp(),flex:1}}/><input type="number" value={sf.cost} onChange={e=>setSf(p=>({...p,cost:e.target.value}))} placeholder="pts" style={{...inp(),width:70}}/><button onClick={addS} style={{background:'#818cf8',border:'none',borderRadius:8,padding:'7px 16px',color:'white',cursor:'pointer',fontWeight:700}}>+ Add</button></div></Card>}
+      {pS.length===0?<div style={{textAlign:'center',opacity:.4,marginTop:40,fontSize:14}}>No shop suggestions yet 🛍️</div>:pS.map(s=><SC key={s.id} s={s} type="shopSuggestions"/>)}</div>}
+      {tab==='features'&&<div>{!isGuest&&<Card title="🔧 Request a Feature" style={{marginBottom:16}}><div style={{display:'flex',gap:8}}><input value={ff} onChange={e=>setFf(e.target.value)} placeholder="Describe your idea..." style={{...inp(),flex:1}}/><button onClick={addF} style={{background:'#818cf8',border:'none',borderRadius:8,padding:'7px 16px',color:'white',cursor:'pointer',fontWeight:700}}>+ Add</button></div></Card>}
+      {pF.length===0?<div style={{textAlign:'center',opacity:.4,marginTop:40,fontSize:14}}>No feature requests yet 💡</div>:pF.map(s=><SC key={s.id} s={s} type="featureRequests"/>)}</div>}
     </div>
   );
 }
@@ -944,6 +1055,298 @@ function ConsolePage({data,update}){
   );
 }
 
+const ONBOARDING_STEPS = [
+  { emoji:'🏠', title:'Welcome to Family Chores!', body:'This app helps your whole family track chores, earn points, and compete on the leaderboard. Let\'s take a quick tour!' },
+  { emoji:'✅', title:'Check Off Chores', body:'Every chore you complete earns you points. Tap a chore to mark it done — it locks for everyone else that day!', demoChore:true },
+  { emoji:'🏆', title:'Leaderboard', body:'See who\'s on top this week or month. Click anyone\'s name to view their profile and stats. Build streaks by checking in every day!' },
+  { emoji:'🎯', title:'Quests & Achievements', body:'Complete personal and family challenges to earn bonus points and unlock special achievements. Check the Quests page daily!' },
+  { emoji:'🛍️', title:'Rewards Shop', body:'Spend your hard-earned points on real rewards — from picking movie night to the ultimate boss reward: a family restaurant visit!' },
+  { emoji:'🎨', title:'Pick a Free Theme!', body:'The app comes with themes you can unlock. Here\'s one on us — pick your favorite!', themePicker:true },
+  { emoji:'🌟', title:'You\'re all set!', body:'Head to ⚙️ Settings anytime to change your theme, background, font and more. Have fun! 🎉' },
+];
+
+function DemoChore() {
+  const [done, setDone] = useState(false);
+  const [popped, setPopped] = useState(false);
+  const handleClick = () => {
+    setDone(d => !d);
+    if (!done) { setPopped(true); setTimeout(() => setPopped(false), 600); }
+  };
+  return (
+    <div style={{marginTop:16}}>
+      <div style={{fontSize:12,opacity:.55,textAlign:'center',marginBottom:10}}>👇 Try it — tap to check off!</div>
+      <div onClick={handleClick} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',borderRadius:14,cursor:'pointer',background:done?'rgba(129,140,248,0.18)':'rgba(255,255,255,0.06)',border:`1px solid ${done?'rgba(129,140,248,0.5)':'rgba(255,255,255,0.12)'}`,transition:'all .2s',transform:popped?'scale(1.03)':'scale(1)'}}>
+        <div style={{width:24,height:24,borderRadius:7,border:`2px solid ${done?'#818cf8':'rgba(255,255,255,0.3)'}`,background:done?'#818cf8':'transparent',display:'flex',alignItems:'center',justifyContent:'center',transition:'all .2s',flexShrink:0}}>
+          {done&&<span style={{fontSize:14,color:'white'}}>✓</span>}
+        </div>
+        <div style={{fontSize:20}}>🧹</div>
+        <div style={{flex:1,fontWeight:500,fontSize:14,textDecoration:done?'line-through':'none',opacity:done?.6:1}}>Vacuum the living room</div>
+        <div style={{fontSize:13,fontWeight:700,color:done?'#818cf8':'#fbbf24',background:done?'rgba(129,140,248,0.15)':'rgba(251,191,36,0.12)',borderRadius:8,padding:'3px 10px'}}>+15</div>
+      </div>
+      {done&&<div style={{textAlign:'center',marginTop:10,fontSize:13,color:'#34d399',fontWeight:700,animation:'none'}}>✨ Nice! That's how it works! Points added to your total.</div>}
+    </div>
+  );
+}
+
+function ThemePreviewMini({themeId,color}) {
+  const [pvDone,setPvDone]=useState({});
+  const tc=TC[themeId]||TC.th0;
+  const samples=[{id:'pv1',name:'Wash the dishes',points:10,emoji:'🍽️'},{id:'pv2',name:'Take out the trash',points:10,emoji:'🗑️'}];
+  return(
+    <div style={{marginTop:12,display:'flex',flexDirection:'column',gap:6}}>
+      <div style={{fontSize:11,opacity:.5,textAlign:'center',marginBottom:2}}>Preview (tap to toggle):</div>
+      {samples.map((c,i)=>(
+        <ChoreItem key={c.id} chore={c} done={!!pvDone[c.id]} doer={pvDone[c.id]?{id:'alon'}:null} myId="alon" isGuest={false} onToggle={()=>setPvDone(p=>({...p,[c.id]:!p[c.id]}))} color={color||'#818cf8'} tc={tc} idx={i} onAnim={()=>{}}/>
+      ))}
+    </div>
+  );
+}
+
+function OnboardingModal({ user, data, onDone, onPurchaseThemeItem }) {
+  const [step, setStep] = useState(0);
+  const [chosen, setChosen] = useState(null);
+  const [claimed, setClaimed] = useState(false);
+  const cur = ONBOARDING_STEPS[step];
+  const isLast = step === ONBOARDING_STEPS.length - 1;
+  const isMob = window.innerWidth < 600;
+  const freeThemes = [{ id:'th0', name:'Original', emoji:'⭐', desc:'Clean classic look', free:true }, ...THEMES.filter(t => !t.free)];
+
+  const claimTheme = () => {
+    if (!chosen || claimed) return;
+    if (chosen.id !== 'th0') onPurchaseThemeItem({ ...chosen, cost: 0 });
+    setClaimed(true);
+  };
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:3000, padding:16, overflowY:'auto', WebkitOverflowScrolling:'touch' }}>
+      <div style={{ background:'linear-gradient(135deg,rgba(15,12,41,.98),rgba(48,43,99,.98))', border:'1px solid rgba(255,255,255,0.12)', borderRadius:24, padding: isMob ? '24px 20px' : '36px 40px', width:'100%', maxWidth:480, position:'relative', margin:'auto' }}>
+        <div style={{ display:'flex', justifyContent:'center', gap:6, marginBottom:24 }}>
+          {ONBOARDING_STEPS.map((_,i) => (
+            <div key={i} style={{ width:i===step?20:7, height:7, borderRadius:4, background:i===step?'#818cf8':i<step?'rgba(129,140,248,0.5)':'rgba(255,255,255,0.15)', transition:'all .3s' }}/>
+          ))}
+        </div>
+        <div style={{ textAlign:'center', marginBottom:16 }}>
+          <div style={{ fontSize:isMob?48:64, marginBottom:12, lineHeight:1 }}>{cur.emoji}</div>
+          <div style={{ fontSize:isMob?20:24, fontWeight:800, marginBottom:10 }}>{cur.title}</div>
+          <div style={{ fontSize:isMob?14:15, opacity:.7, lineHeight:1.65 }}>{cur.body}</div>
+        </div>
+        {cur.demoChore && <DemoChore/>}
+        {cur.themePicker && (
+          <div style={{ marginBottom:16 }}>
+            <div style={{ fontSize:13, opacity:.6, textAlign:'center', marginBottom:12 }}>Tap to select · see a live preview below!</div>
+            <div style={{ display:'grid', gridTemplateColumns:`repeat(${isMob?2:3},1fr)`, gap:8 }}>
+              {freeThemes.map(th => {
+                const conf = TC[th.id];
+                const sel = chosen?.id === th.id;
+                return (
+                  <div key={th.id} onClick={() => !claimed && setChosen(th)} style={{ borderRadius:12, padding:'12px 8px', textAlign:'center', background:sel?(conf.accent?`${conf.accent}25`:'rgba(129,140,248,0.2)'):'rgba(255,255,255,0.04)', border:`2px solid ${sel?(conf.accent||'#818cf8'):'rgba(255,255,255,0.08)'}`, cursor:claimed?'default':'pointer', transition:'all .15s', opacity:claimed&&!sel?.5:1 }}>
+                    <div style={{ fontSize:22, marginBottom:4 }}>{th.emoji||'⭐'}</div>
+                    <div style={{ fontSize:11, fontWeight:700 }}>{th.name}</div>
+                  </div>
+                );
+              })}
+            </div>
+            {chosen && <ThemePreviewMini themeId={chosen.id} color={user.color}/>}
+            {chosen && !claimed && (
+              <button onClick={claimTheme} style={{ width:'100%', marginTop:12, background:`linear-gradient(135deg,${TC[chosen.id]?.accent||'#818cf8'},#6366f1)`, border:'none', borderRadius:12, padding:'12px', color:'white', fontWeight:800, fontSize:15, cursor:'pointer' }}>
+                {chosen.id==='th0'?'Keep Original Theme ⭐':`Claim ${chosen.emoji} ${chosen.name} — Free! 🎁`}
+              </button>
+            )}
+            {claimed && <div style={{ textAlign:'center', marginTop:12, color:'#34d399', fontWeight:700, fontSize:14 }}>✓ {chosen.emoji} {chosen.name} set! Change anytime in ⚙️ Settings.</div>}
+          </div>
+        )}
+        <div style={{ display:'flex', gap:10, justifyContent:'center', marginTop:8 }}>
+          {step > 0 && <button onClick={() => setStep(s => s-1)} style={{ flex:1, background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,255,255,0.12)', borderRadius:12, padding:'12px', color:'white', cursor:'pointer', fontWeight:600, fontSize:15 }}>← Back</button>}
+          <button onClick={() => isLast ? onDone() : setStep(s => s+1)} style={{ flex:2, background:isLast?'linear-gradient(135deg,#34d399,#059669)':'linear-gradient(135deg,#818cf8,#6366f1)', border:'none', borderRadius:12, padding:'12px', color:'white', cursor:'pointer', fontWeight:800, fontSize:15 }}>
+            {isLast ? "Let's go! 🚀" : 'Next →'}
+          </button>
+        </div>
+        {!isLast && <button onClick={onDone} style={{ width:'100%', marginTop:10, background:'none', border:'none', color:'rgba(255,255,255,0.3)', cursor:'pointer', fontSize:12, padding:4 }}>Skip tour</button>}
+      </div>
+    </div>
+  );
+}
+
+// ── Achievements Grid ─────────────────────────────────────────
+function AchievementsGrid({user,data,stats,streak}){
+  const s=stats[user.id]||{};
+  const redemptions=(data.redemptions||[]).filter(r=>r.userId===user.id);
+  const earned=(data.achievementsEarned||{})[user.id]||{};
+  const extra={loggedIn:true,loginStreak:(data.userSettings||{})[user.id]?.loginStreak||1,boostChore:(data.userSettings||{})[user.id]?.earnedBoostChore};
+  const unlocked=ACHIEVEMENTS.filter(a=>earned[a.id]||a.check(s,streak,redemptions.length,extra));
+  const locked=ACHIEVEMENTS.filter(a=>!earned[a.id]&&!a.check(s,streak,redemptions.length,extra));
+  return(
+    <div>
+      {unlocked.length>0&&<div>
+        <div style={{fontSize:13,fontWeight:700,color:'#34d399',marginBottom:10}}>✓ Unlocked ({unlocked.length})</div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))',gap:8,marginBottom:20}}>
+          {unlocked.map(a=>{const r=RARITIES[a.rarity]||RARITIES.common;return(
+            <div key={a.id} style={{...glass(),padding:'12px 10px',textAlign:'center',border:`1px solid ${r.color}44`,background:`${r.color}10`}}>
+              <div style={{fontSize:28,marginBottom:4}}>{a.emoji}</div>
+              <div style={{fontWeight:700,fontSize:12,color:r.color}}>{a.name}</div>
+              <div style={{fontSize:10,opacity:.55,marginTop:2}}>{a.desc}</div>
+              <div style={{fontSize:9,color:r.color,marginTop:4,fontWeight:700,textTransform:'uppercase'}}>{r.label}</div>
+            </div>
+          );})}
+        </div>
+      </div>}
+      {locked.length>0&&<div>
+        <div style={{fontSize:13,fontWeight:700,opacity:.4,marginBottom:10}}>🔒 Locked ({locked.length})</div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))',gap:8}}>
+          {locked.map(a=>(
+            <div key={a.id} style={{...glass(),padding:'12px 10px',textAlign:'center',opacity:.35}}>
+              <div style={{fontSize:28,marginBottom:4,filter:'grayscale(1)'}}>🔒</div>
+              <div style={{fontWeight:700,fontSize:12}}>{a.name}</div>
+              <div style={{fontSize:10,opacity:.55,marginTop:2}}>{a.desc}</div>
+            </div>
+          ))}
+        </div>
+      </div>}
+    </div>
+  );
+}
+
+// ── Console ──────────────────────────────────────────────────
+  const c=data.completions,claims=(data.questClaims||{})[user.id]||{};
+  const weekKey=getWkSt();
+  const claimQuest=(id,pts)=>{
+    if(isGuest)return;
+    update(prev=>({...prev,
+      questClaims:{...(prev.questClaims||{}),[user.id]:{...((prev.questClaims||{})[user.id]||{}),[`${id}_${weekKey}`]:true}},
+      completions:[...prev.completions,{id:`quest_${id}_${Date.now()}`,userId:user.id,choreId:`quest_${id}`,points:pts,date:getToday()}],
+    }));
+  };
+  const isClaimed=id=>!!claims[`${id}_${weekKey}`];
+  const famSize=getFam(data).length;
+
+  return(
+    <div style={{padding:20,maxWidth:680,margin:'0 auto',overflowY:'auto',WebkitOverflowScrolling:'touch'}}>
+      <div style={{fontSize:22,fontWeight:800,marginBottom:4}}>🎯 Quests</div>
+      <div style={{opacity:.5,fontSize:13,marginBottom:20}}>Weekly challenges — reset every Sunday! Complete them for bonus points.</div>
+
+      <div style={{fontWeight:700,fontSize:16,marginBottom:12}}>👤 Personal Challenges</div>
+      <div style={{display:'flex',flexDirection:'column',gap:10,marginBottom:28}}>
+        {PERSONAL_QUESTS.map(q=>{
+          const done=q.check(c,user.id,stats);
+          const claimed=isClaimed(q.id);
+          return(
+            <div key={q.id} style={{...glass(),padding:'14px 16px',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+              <div style={{fontSize:28,flexShrink:0}}>{q.emoji}</div>
+              <div style={{flex:1,minWidth:120}}>
+                <div style={{fontWeight:700,fontSize:14}}>{q.name}</div>
+                <div style={{fontSize:12,opacity:.55,marginTop:2}}>{q.desc}</div>
+              </div>
+              <div style={{fontWeight:800,color:'#fbbf24',fontSize:15,flexShrink:0}}>+{q.pts} pts</div>
+              <button onClick={()=>done&&!claimed&&claimQuest(q.id,q.pts)} disabled={!done||claimed||isGuest} style={{background:claimed?'rgba(52,211,153,0.15)':done?'linear-gradient(135deg,#818cf8,#6366f1)':'rgba(255,255,255,0.06)',border:'none',borderRadius:10,padding:'8px 16px',color:claimed?'#34d399':done?'white':'#4b5563',cursor:done&&!claimed&&!isGuest?'pointer':'not-allowed',fontWeight:700,fontSize:13,flexShrink:0,whiteSpace:'nowrap'}}>
+                {claimed?'✓ Claimed':done?'Claim! 🎉':'In Progress'}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{fontWeight:700,fontSize:16,marginBottom:12}}>👨‍👩‍👧 Family Goals</div>
+      <div style={{display:'flex',flexDirection:'column',gap:10}}>
+        {FAMILY_QUESTS.map(q=>{
+          const prog=q.progress(c,data);
+          const done=q.check(c,data);
+          const claimed=isClaimed(q.id);
+          const pct=q.target?Math.min(100,Math.round((prog/q.target)*100)):done?100:Math.round((prog/famSize)*100);
+          return(
+            <div key={q.id} style={{...glass(),padding:'14px 16px'}}>
+              <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:10,flexWrap:'wrap'}}>
+                <div style={{fontSize:28,flexShrink:0}}>{q.emoji}</div>
+                <div style={{flex:1,minWidth:120}}>
+                  <div style={{fontWeight:700,fontSize:14}}>{q.name}</div>
+                  <div style={{fontSize:12,opacity:.55,marginTop:2}}>{q.desc}</div>
+                </div>
+                <div style={{fontWeight:800,color:'#fbbf24',fontSize:15,flexShrink:0}}>+{q.pts} pts each</div>
+              </div>
+              <div style={{background:'rgba(255,255,255,0.08)',borderRadius:8,height:8,overflow:'hidden',marginBottom:8}}>
+                <div style={{height:'100%',background:done?'#34d399':'linear-gradient(90deg,#818cf8,#6366f1)',borderRadius:8,width:`${pct}%`,transition:'width .5s'}}/>
+              </div>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <div style={{fontSize:12,opacity:.55}}>{q.target?`${prog} / ${q.target}`:done?'Complete!':'In progress…'}</div>
+                <button onClick={()=>done&&!claimed&&!isGuest&&claimQuest(q.id,q.pts)} disabled={!done||claimed||isGuest} style={{background:claimed?'rgba(52,211,153,0.15)':done?'linear-gradient(135deg,#818cf8,#6366f1)':'rgba(255,255,255,0.06)',border:'none',borderRadius:10,padding:'6px 14px',color:claimed?'#34d399':done?'white':'#4b5563',cursor:done&&!claimed&&!isGuest?'pointer':'not-allowed',fontWeight:700,fontSize:13,whiteSpace:'nowrap'}}>
+                  {claimed?'✓ Claimed':done?'Claim! 🎉':'In Progress'}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Social Page ────────────────────────────────────────────────
+function SocialPage({user,data,update,isGuest,profilePics,dynUsers,userSettingsMap}){
+  const [msg,setMsg]=useState('');
+  const chat=(data.chat||[]).slice(-60);
+  const chatEndRef=useRef(null);
+  useEffect(()=>{chatEndRef.current?.scrollIntoView({behavior:'smooth'});},[chat.length]);
+
+  const sendMsg=()=>{
+    if(!msg.trim()||isGuest)return;
+    const newMsg={id:`msg_${Date.now()}`,userId:user.id,name:user.name,color:user.color,text:msg.trim(),ts:Date.now()};
+    update(prev=>({...prev,chat:[...(prev.chat||[]).slice(-99),newMsg]}));
+    setMsg('');
+  };
+
+  const recentActivity=[...data.completions].reverse().slice(0,15).map(c=>{
+    const u=getUser(c.userId,dynUsers);
+    const ch=[...BASE_CHORES,...data.customChores,...(data.recurringTasks||[])].find(x=>x.id===c.choreId)||{name:'a chore',emoji:'✅'};
+    return{...c,userName:u.name,userColor:u.color,choreName:ch.name,choreEmoji:ch.emoji};
+  });
+
+  return(
+    <div style={{padding:20,maxWidth:680,margin:'0 auto'}}>
+      <div style={{fontSize:22,fontWeight:800,marginBottom:4}}>💬 Social</div>
+      <div style={{opacity:.5,fontSize:13,marginBottom:20}}>Chat with your family and see what everyone's been up to!</div>
+
+      {/* Activity Feed */}
+      <Card title="🏃 Recent Activity" style={{marginBottom:16}}>
+        <div style={{display:'flex',flexDirection:'column',gap:6,maxHeight:200,overflowY:'auto',WebkitOverflowScrolling:'touch'}}>
+          {recentActivity.length===0?<div style={{opacity:.4,fontSize:13,textAlign:'center',padding:'12px 0'}}>No activity yet — go check off some chores!</div>:
+          recentActivity.map((a,i)=>(
+            <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'7px 0',borderBottom:'1px solid rgba(255,255,255,0.05)',fontSize:13}}>
+              <div style={{width:28,height:28,borderRadius:'50%',background:`linear-gradient(135deg,${a.userColor},${a.userColor}88)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:800,color:'white',flexShrink:0}}>{a.userName[0]}</div>
+              <div style={{flex:1}}><span style={{fontWeight:700,color:a.userColor}}>{a.userName}</span> completed {a.choreEmoji} <span style={{opacity:.75}}>{a.choreName}</span></div>
+              <div style={{color:'#34d399',fontWeight:700,fontSize:12,flexShrink:0}}>+{a.points}</div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Chat */}
+      <Card title="💬 Family Chat" noPad>
+        <div style={{height:280,overflowY:'auto',WebkitOverflowScrolling:'touch',padding:'12px 14px',display:'flex',flexDirection:'column',gap:8}}>
+          {chat.length===0&&<div style={{opacity:.35,fontSize:13,textAlign:'center',margin:'auto'}}>No messages yet — say hi! 👋</div>}
+          {chat.map(m=>{
+            const isMe=m.userId===user.id;
+            return(
+              <div key={m.id} style={{display:'flex',alignItems:'flex-end',gap:8,flexDirection:isMe?'row-reverse':'row'}}>
+                <div style={{width:28,height:28,borderRadius:'50%',background:`linear-gradient(135deg,${m.color},${m.color}88)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:800,color:'white',flexShrink:0}}>{m.name[0]}</div>
+                <div style={{maxWidth:'70%'}}>
+                  {!isMe&&<div style={{fontSize:10,color:m.color,fontWeight:700,marginBottom:2,marginLeft:4}}>{m.name}</div>}
+                  <div style={{background:isMe?'linear-gradient(135deg,#818cf8,#6366f1)':'rgba(255,255,255,0.08)',borderRadius:isMe?'16px 16px 4px 16px':'16px 16px 16px 4px',padding:'8px 12px',fontSize:14,wordBreak:'break-word'}}>{m.text}</div>
+                  <div style={{fontSize:9,opacity:.35,marginTop:2,textAlign:isMe?'right':'left',paddingLeft:4,paddingRight:4}}>{new Date(m.ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>
+                </div>
+              </div>
+            );
+          })}
+          <div ref={chatEndRef}/>
+        </div>
+        {!isGuest?(
+          <div style={{padding:'0 14px 14px',display:'flex',gap:8}}>
+            <input value={msg} onChange={e=>setMsg(e.target.value)} onKeyDown={e=>e.key==='Enter'&&sendMsg()} placeholder="Say something..." style={{...inp(),flex:1,minWidth:0,borderRadius:10,padding:'10px 14px'}}/>
+            <button onClick={sendMsg} style={{background:'linear-gradient(135deg,#818cf8,#6366f1)',border:'none',borderRadius:10,padding:'10px 16px',color:'white',cursor:'pointer',fontWeight:700,fontSize:15,flexShrink:0}}>➤</button>
+          </div>
+        ):<div style={{padding:'10px 14px',fontSize:13,opacity:.5,textAlign:'center'}}>Log in to chat</div>}      </Card>
+    </div>
+  );
+}
+
 // ── Preview Overlay ──────────────────────────────────────────
 function PreviewOverlay({previewMode,data,user,onClose,allChores,recurringTasks,profilePics,userSettingsMap}){
   const [pvPage,setPvPage]=useState('main');
@@ -1111,14 +1514,58 @@ export default function App(){
   const [winW,setWinW]=useState(window.innerWidth);
   const [particles,setParticles]=useState([]);
   const [previewMode,setPreviewMode]=useState(null);
+  const [showOnboarding,setShowOnboarding]=useState(false);
+  const [syncStatus,setSyncStatus]=useState('ok'); // 'ok' | 'saving' | 'error'
   const prevTiers=useRef({});
   const pId=useRef(0);
+  const lastSynced=useRef(null);
+  const isWriting=useRef(false);
 
   useEffect(()=>{const h=()=>setWinW(window.innerWidth);window.addEventListener('resize',h);return()=>window.removeEventListener('resize',h);},[]);
   const isMobile=winW<700;
-  useEffect(()=>{(async()=>{try{const r=await window.storage.get(SK);setData(r?migrate(JSON.parse(r.value)):initData());}catch{setData(initData());}})();},[]);
-  const save=async d=>{try{await window.storage.set(SK,JSON.stringify(d));}catch{}};
+  useEffect(()=>{
+    (async()=>{
+      if(USE_SB){
+        const row=await sbLoad();
+        if(row?.data&&Object.keys(row.data).length>0){
+          setData(migrate(row.data));
+          lastSynced.current=row.updated_at;
+        } else {
+          setData(initData());
+        }
+      } else {
+        try{const r=await window.storage.get(SK);setData(r?migrate(JSON.parse(r.value)):initData());}
+        catch{setData(initData());}
+      }
+    })();
+  },[]);
+  const save=async d=>{
+    isWriting.current=true;
+    setSyncStatus('saving');
+    if(USE_SB){
+      await sbSave(d,lastSynced);
+      setSyncStatus('ok');
+    } else {
+      try{await window.storage.set(SK,JSON.stringify(d));setSyncStatus('ok');}
+      catch{setSyncStatus('error');}
+    }
+    setTimeout(()=>{isWriting.current=false;},2500);
+  };
   const update=fn=>setData(prev=>{const next=fn(prev);save(next);return next;});
+
+  // Realtime polling — every 4s, pull from Supabase if another device changed data
+  useEffect(()=>{
+    if(!data||!USE_SB)return;
+    const poll=setInterval(async()=>{
+      if(isWriting.current)return;
+      const row=await sbLoad();
+      if(row?.updated_at&&row.updated_at!==lastSynced.current){
+        lastSynced.current=row.updated_at;
+        setData(migrate(row.data));
+      }
+    },4000);
+    return()=>clearInterval(poll);
+  },[!!data]);
 
   useEffect(()=>{if(!user||!data)return;const s=gUS(data,user.id),font=FONTS.find(f=>f.id===s.font);if(font?.google){const id=`gf-${font.id}`;if(!document.getElementById(id)){const l=document.createElement('link');l.id=id;l.rel='stylesheet';l.href=`https://fonts.googleapis.com/css2?family=${font.google}&display=swap`;document.head.appendChild(l);}};},[user,data?.userSettings]);
 
@@ -1139,8 +1586,33 @@ export default function App(){
     prevTiers.current[user.id]=cur;
   },[data,user]);
 
+  // Auto-unlock achievements
   useEffect(()=>{
-    if(!data?.wishlist)return;let changed=false;const nD=[...(data.dynamicShopItems||[])];
+    if(!data||!user||user.guest)return;
+    const st=compStats(data.completions,data.redemptions,data);
+    const s=st[user.id]||{};
+    const streak=calcStreak(data.completions,user.id);
+    const redemptions=(data.redemptions||[]).filter(r=>r.userId===user.id);
+    const earned=(data.achievementsEarned||{})[user.id]||{};
+    const extra={loggedIn:true,loginStreak:(data.userSettings||{})[user.id]?.loginStreak||1,boostChore:(data.userSettings||{})[user.id]?.earnedBoostChore};
+    const newlyEarned=ACHIEVEMENTS.filter(a=>!earned[a.id]&&a.check(s,streak,redemptions.length,extra));
+    if(newlyEarned.length>0){
+      const newMap={...earned};
+      newlyEarned.forEach(a=>{newMap[a.id]=true;});
+      update(prev=>({...prev,achievementsEarned:{...(prev.achievementsEarned||{}),[user.id]:newMap}}));
+    }
+  },[data?.completions?.length,data?.redemptions?.length,user?.id]);
+
+  // Track booster chore achievement
+  useEffect(()=>{
+    if(!data||!user||user.guest)return;
+    const ab=getActiveBst(data);
+    const t=getToday();
+    if(ab&&data.completions.some(c=>c.userId===user.id&&c.date===t)){
+      const already=(data.userSettings||{})[user.id]?.earnedBoostChore;
+      if(!already) update(prev=>({...prev,userSettings:{...(prev.userSettings||{}),[user.id]:{...gUS(prev,user.id),earnedBoostChore:true}}}));
+    }
+  },[data?.completions?.length]);useEffect(()=>{let changed=false;const nD=[...(data.dynamicShopItems||[])];
     const nS=(data.wishlist.shopSuggestions||[]).map(s=>{if(s.status!=='pending'||daysSince(s.createdAt)<7)return s;const votes=Object.values(s.votes);if(!votes.length)return s;changed=true;const yes=votes.filter(v=>v==='y').length,no=votes.filter(v=>v==='n').length;if(yes>no)nD.push({id:`ds_${s.id}`,name:s.name,emoji:'⭐',cost:s.cost,desc:'Suggested by the family!'});return{...s,status:yes>no?'added':'rejected'};});
     const nF=(data.wishlist.featureRequests||[]).map(f=>{if(f.status!=='pending'||daysSince(f.createdAt)<7)return f;const votes=Object.values(f.votes);if(!votes.length)return f;changed=true;return{...f,status:votes.filter(v=>v==='y').length>votes.length/2?'approved':'rejected'};});
     if(changed)update(()=>({...data,wishlist:{shopSuggestions:nS,featureRequests:nF},dynamicShopItems:nD}));
@@ -1157,9 +1629,14 @@ export default function App(){
   if(!user){
     const allFL=getFam(data);
     const doLogin=()=>{const match=allFL.find(u=>u.name.toLowerCase()===loginForm.u.toLowerCase()&&u.password.toLowerCase()===loginForm.p.toLowerCase());if(match){prevTiers.current[match.id]=getTier(compStats(data.completions,data.redemptions,data)[match.id]?.totalTasks||0);setUser(match);setLoginErr('');}else setLoginErr('Wrong name or password. Try again!');};
-    const quickLogin=u=>{prevTiers.current[u.id]=getTier(compStats(data.completions,data.redemptions,data)[u.id]?.totalTasks||0);setUser(u);};
+    const quickLogin=u=>{
+      prevTiers.current[u.id]=getTier(compStats(data.completions,data.redemptions,data)[u.id]?.totalTasks||0);
+      setUser(u);
+      const seen=(data.userSettings||{})[u.id]?.onboardingDone;
+      if(!seen) setShowOnboarding(true);
+    };
     const isSimple=data.loginMode!=='password';
-    const bgStyle={background:'linear-gradient(135deg,#0f0c29 0%,#302b63 50%,#24243e 100%)',minHeight:'100vh',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',fontFamily:"'Segoe UI',sans-serif",padding:'24px 16px',color:'white'};
+    const bgStyle={background:'linear-gradient(135deg,#0f0c29 0%,#302b63 50%,#24243e 100%)',minHeight:'100vh',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',fontFamily:"'Segoe UI',sans-serif",padding:'24px 16px',color:'white',overflowY:'auto',WebkitOverflowScrolling:'touch'};
 
     if(isSimple) return(
       <div style={bgStyle}>
@@ -1251,8 +1728,23 @@ export default function App(){
   const vote=id=>{if(isGuest)return;const val=parseInt(voteVals[id]);if(!val||val<1)return;update(prev=>({...prev,suggestions:prev.suggestions.map(s=>s.id===id?{...s,votes:{...s.votes,[user.id]:val}}:s)}));setVoteVals(p=>({...p,[id]:''}));};
   const redeem=item=>{if(isGuest||myStats.availablePoints<item.cost){setShopMsg(`Need ${item.cost-myStats.availablePoints} more pts!`);setTimeout(()=>setShopMsg(''),3e3);return;}update(prev=>({...prev,redemptions:[...prev.redemptions,{id:`red_${Date.now()}`,userId:user.id,itemName:item.name,cost:item.cost,date:today}]}));setShopMsg(`🎉 Redeemed: ${item.emoji} ${item.name}!`);setTimeout(()=>setShopMsg(''),4e3);};
   const purchaseThemeItem=item=>{if(isGuest||myStats.availablePoints<item.cost){setShopMsg(`Need ${item.cost-myStats.availablePoints} more pts!`);setTimeout(()=>setShopMsg(''),3e3);return;}update(prev=>({...prev,redemptions:[...prev.redemptions,{id:`red_${Date.now()}`,userId:user.id,itemName:item.name,cost:item.cost,date:today}],purchases:{...(prev.purchases||{}),[user.id]:[...((prev.purchases||{})[user.id]||[]),item.id]}}));setShopMsg(`🎉 Unlocked: ${item.emoji} ${item.name}! Equip in ⚙️ Settings.`);setTimeout(()=>setShopMsg(''),4e3);};
-  const purchaseBooster=item=>{if(isGuest||myStats.availablePoints<item.cost)return;update(prev=>{const red=[...prev.redemptions,{id:`red_${Date.now()}`,userId:user.id,itemName:item.name,cost:item.cost,date:today}];if(item.permanent)return{...prev,redemptions:red,purchases:{...(prev.purchases||{}),[user.id]:[...((prev.purchases||{})[user.id]||[]),item.id]}};return{...prev,redemptions:red,boosters:[...(prev.boosters||[]),{id:`bst_${Date.now()}`,multiplier:item.multiplier,expiresAt:Date.now()+item.durationDays*864e5,activatedBy:user.id}]};});setShopMsg(`⚡ Booster activated! ${item.multiplier}x${item.permanent?' permanent':''}!`);setTimeout(()=>setShopMsg(''),5e3);};
-  const onUploadPic=(uid,dataUrl)=>update(prev=>({...prev,profilePics:{...(prev.profilePics||{}),[uid]:dataUrl}}));
+  const purchaseBooster=item=>{
+    if(isGuest||myStats.availablePoints<item.cost)return;
+    update(prev=>{
+      const red=[...prev.redemptions,{id:`red_${Date.now()}`,userId:user.id,itemName:item.name,cost:item.cost,date:today}];
+      if(item.permanent)return{...prev,redemptions:red,purchases:{...(prev.purchases||{}),[user.id]:[...((prev.purchases||{})[user.id]||[]),item.id]}};
+      // Time stacking: extend existing booster of same multiplier, don't add a new one
+      const existing=(prev.boosters||[]).find(b=>b.multiplier===item.multiplier&&b.expiresAt>Date.now());
+      const expiresAt=existing?existing.expiresAt+item.durationDays*864e5:Date.now()+item.durationDays*864e5;
+      const rest=(prev.boosters||[]).filter(b=>b.id!==existing?.id);
+      return{...prev,redemptions:red,boosters:[...rest,{id:`bst_${Date.now()}`,multiplier:item.multiplier,expiresAt,activatedBy:user.id}]};
+    });
+    setShopMsg(`⚡ Booster activated! ${item.multiplier}x${item.permanent?' permanent':''}!`);setTimeout(()=>setShopMsg(''),5e3);
+  };
+  const onUploadPic=async(uid,file)=>{
+    const compressed=await compressImage(file,240);
+    update(prev=>({...prev,profilePics:{...(prev.profilePics||{}),[uid]:compressed}}));
+  };
   const updateSettings=patch=>update(prev=>({...prev,userSettings:{...(prev.userSettings||{}),[user.id]:{...gUS(prev,user.id),...patch}}}));
   const lb=getFam(data).slice();
   const pendSuggs=data.suggestions.filter(s=>s.status==='pending');
@@ -1268,15 +1760,16 @@ export default function App(){
     <div className={(!customBg&&bgEntry?.cls)||''} style={appStyle}>
       <style>{GCSS}</style>
       <Particles particles={particles}/>
+      {showOnboarding&&<OnboardingModal user={user} data={data} onPurchaseThemeItem={item=>{update(prev=>({...prev,purchases:{...(prev.purchases||{}),[user.id]:[...((prev.purchases||{})[user.id]||[]),item.id]}}));}} onDone={()=>{setShowOnboarding(false);update(prev=>({...prev,userSettings:{...(prev.userSettings||{}),[user.id]:{...gUS(prev,user.id),onboardingDone:true}}}));}}/>}
       {previewMode&&<PreviewOverlay previewMode={previewMode} data={data} user={user} onClose={()=>setPreviewMode(null)} allChores={allChores} recurringTasks={data.recurringTasks} profilePics={profilePics} userSettingsMap={userSettingsMap}/>}
       {tierPopup&&<TierUpModal tier={tierPopup} name={user.name} onClose={()=>setTierPopup(null)}/>}
       {viewProfile&&<ProfileModal userId={viewProfile} stats={stats} onClose={()=>setViewProfile(null)} profilePics={profilePics} dynUsers={dynUsers} userSettingsMap={userSettingsMap}/>}
       {sidebar&&<Sidebar page={page} setPage={doSetPage} onClose={()=>setSidebar(false)} user={user} myStats={myStats} onLogout={doLogout} profilePics={profilePics} ownDecoClass={ownDecoClass}/>}
       <Ticker anns={data.announcements}/>
       {isGuest&&<div style={{background:'rgba(148,163,184,0.13)',borderBottom:'1px solid rgba(148,163,184,0.2)',padding:'6px 18px',display:'flex',alignItems:'center',gap:8,fontSize:12,color:'#94a3b8',flexShrink:0}}>👁️ <strong>View-Only</strong> — Log in to earn points!</div>}
-      <Header onMenu={()=>setSidebar(true)} user={user} myStats={myStats} setPage={p=>{setPage(p);setSidebar(false);}} title={pageTitles[page]||''} profilePics={profilePics} settings={settings} page={page} activeBooster={activeBst} ownDecoClass={ownDecoClass}/>
-      <div style={{flex:1,overflowY:'auto'}}>
-        {page==='profile'&&(isGuest?<GuestProfile/>:<ProfileContent user={user} myStats={myStats} completions={data.completions} allChores={allChores} recurringTasks={data.recurringTasks} wins={data.wins||{}} profilePics={profilePics} onUploadPic={onUploadPic} userSettingsMap={userSettingsMap}/>)}
+      <Header onMenu={()=>setSidebar(true)} user={user} myStats={myStats} setPage={p=>{setPage(p);setSidebar(false);}} title={pageTitles[page]||''} profilePics={profilePics} settings={settings} page={page} activeBooster={activeBst} ownDecoClass={ownDecoClass} syncStatus={syncStatus} streak={calcStreak(data.completions,user.id)}/>
+      <div style={{flex:1,overflowY:'auto',WebkitOverflowScrolling:'touch'}}>
+        {page==='profile'&&(isGuest?<GuestProfile/>:<ProfileContent user={user} myStats={myStats} completions={data.completions} allChores={allChores} recurringTasks={data.recurringTasks} wins={data.wins||{}} profilePics={profilePics} onUploadPic={onUploadPic} userSettingsMap={userSettingsMap} data={data}/>)}
         {page==='shop'&&<ShopContent myStats={myStats} redemptions={data.redemptions} user={user} onRedeem={redeem} onPurchaseThemeItem={purchaseThemeItem} onPurchaseBooster={purchaseBooster} shopMsg={shopMsg} isGuest={isGuest} data={data} onPreview={setPreviewMode}/>}
         {page==='settings'&&<SettingsContent user={user} data={data} updateSettings={updateSettings} gotoShop={()=>doSetPage('shop')}/>}
         {page==='wishlist'&&<WishlistContent user={user} data={data} update={update} isGuest={isGuest}/>}
@@ -1288,7 +1781,7 @@ export default function App(){
                 <button key={t} onClick={()=>setMobileTab(t)} style={{flex:1,padding:'12px',background:mobileTab===t?'rgba(255,255,255,0.1)':'transparent',border:'none',color:mobileTab===t?'white':'rgba(255,255,255,0.4)',fontWeight:mobileTab===t?700:400,cursor:'pointer',fontSize:14}}>{l}</button>
               ))}
             </div>
-            <div style={{flex:1,overflowY:'auto',padding:'14px 12px'}}>
+            <div style={{flex:1,overflowY:'auto',WebkitOverflowScrolling:'touch',padding:'14px 12px'}}>
               {mobileTab==='chores'?<ChoresPanel {...spProps}/>:<BoardPanel {...bpProps}/>}
             </div>
           </div>
