@@ -6,8 +6,8 @@ const BASE_USERS = [
   { id:'daniel', name:'Daniel', password:'daniel123', color:'#38bdf8' },
   { id:'ariel',  name:'Ariel',  password:'ariel123',  color:'#34d399' },
   { id:'tzippy', name:'Tzippy', password:'tzippy123', color:'#fbbf24' },
-  { id:'Mari',    name:'Mari',    password:'mari123',    color:'#a78bfa' },
-  { id:'dylan',  name:'Dylan',  password:'dylan123',  color:'#fb7185' },
+  { id:'ami',    name:'ami',    password:'ami123',    color:'#a78bfa' },
+  { id:'mari',  name:'Mari',  password:'mari123',  color:'#fb7185' },
 ];
 const GUEST   = { id:'guest', name:'Guest', password:'', color:'#94a3b8', guest:true };
 const getFam  = d => [...BASE_USERS, ...(d?.dynamicUsers||[])];
