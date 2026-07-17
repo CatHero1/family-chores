@@ -1708,17 +1708,17 @@ export default function App(){
       doLogin(u);
     };
     const isSimple=data.loginMode!=='password';
-    const bgStyle={background:'linear-gradient(135deg,#0f0c29 0%,#302b63 50%,#24243e 100%)',minHeight:'100vh',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',fontFamily:"'Segoe UI',sans-serif",padding:'24px 16px',color:'white',overflowY:'auto',WebkitOverflowScrolling:'touch'};
+    const bgStyle={background:'linear-gradient(135deg,#0f0c29 0%,#302b63 50%,#24243e 100%)',position:'fixed',inset:0,zIndex:1,display:'flex',flexDirection:'column',alignItems:'center',fontFamily:"'Segoe UI',sans-serif",padding:'24px 16px',color:'white',overflowY:'auto',overflowX:'hidden',WebkitOverflowScrolling:'touch',boxSizing:'border-box'};
 
     if(isSimple) return(
       <div style={bgStyle}>
         <style>{GCSS}</style>
-        <div style={{textAlign:'center',marginBottom:36}}>
+        <div style={{textAlign:'center',marginBottom:36,marginTop:'auto',flexShrink:0}}>
           <div style={{fontSize:64,marginBottom:8}}>🏠</div>
           <div style={{fontSize:32,fontWeight:800,letterSpacing:-.5}}>Family Chores</div>
           <div style={{fontSize:15,opacity:.45,marginTop:6}}>Who's checking in today?</div>
         </div>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))',gap:14,width:'100%',maxWidth:680}}>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))',gap:14,width:'100%',maxWidth:680,marginBottom:'auto',flexShrink:0}}>
           {allFL.map(u=>{
             const pic=(data.profilePics||{})[u.id]||null;
             const tier=getTier(compStats(data.completions,data.redemptions,data)[u.id]?.totalTasks||0);
@@ -1752,7 +1752,7 @@ export default function App(){
     return(
       <div style={bgStyle}>
         <style>{GCSS}</style>
-        <div style={{textAlign:'center',width:'100%',maxWidth:360}}>
+        <div style={{textAlign:'center',width:'100%',maxWidth:360,margin:'auto 0',flexShrink:0}}>
           <div style={{fontSize:60}}>🏠</div>
           <div style={{fontSize:28,fontWeight:800,margin:'8px 0 4px'}}>Family Chores</div>
           <div style={{opacity:.5,marginBottom:24,fontSize:14}}>Log in to earn points & climb the leaderboard!</div>
