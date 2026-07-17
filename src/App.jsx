@@ -35,7 +35,7 @@ const BASE_SHOP_ITEMS = [
   {id:'s4',name:'1 hour extra screen time',   emoji:'🎮',cost:80, desc:"Level up your gaming session!"},
   {id:'s5',name:'Choose dinner for the night',emoji:'🍕',cost:100,desc:"You're the chef of decisions!"},
   {id:'s6',name:'Assign a chore to someone',  emoji:'👑',cost:150,desc:"Delegate like a boss!"},
-  {id:'s7',name:'Streak Saver',               emoji:'🛡️',cost:25, desc:"Restore a broken streak — stores in your inventory!",streakSaver:true},
+  {id:'s7',name:'Streak Saver',               emoji:'🛡️',cost:15, desc:"Restore a broken streak — stores in your inventory!",streakSaver:true},
   {id:'s8',name:'Family Restaurant Visit',    emoji:'🍽️',cost:500,desc:"The ultimate family outing!",boss:true},
 ];
 const BASE_RECURRING = [
