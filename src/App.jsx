@@ -1099,9 +1099,9 @@ function DemoChore() {
         <div style={{width:24,height:24,borderRadius:7,border:`2px solid ${done?'#818cf8':'rgba(255,255,255,0.3)'}`,background:done?'#818cf8':'transparent',display:'flex',alignItems:'center',justifyContent:'center',transition:'all .2s',flexShrink:0}}>
           {done&&<span style={{fontSize:14,color:'white'}}>✓</span>}
         </div>
-        <div style={{fontSize:20}}>🧹</div>
-        <div style={{flex:1,fontWeight:500,fontSize:14,textDecoration:done?'line-through':'none',opacity:done?.6:1}}>Vacuum the living room</div>
-        <div style={{fontSize:13,fontWeight:700,color:done?'#818cf8':'#fbbf24',background:done?'rgba(129,140,248,0.15)':'rgba(251,191,36,0.12)',borderRadius:8,padding:'3px 10px'}}>+15</div>
+        <div style={{fontSize:20}}>🧪</div>
+        <div style={{flex:1,fontWeight:500,fontSize:14,textDecoration:done?'line-through':'none',opacity:done?.6:1}}>This is an example task!</div>
+        <div style={{fontSize:13,fontWeight:700,color:done?'#818cf8':'#fbbf24',background:done?'rgba(129,140,248,0.15)':'rgba(251,191,36,0.12)',borderRadius:8,padding:'3px 10px'}}>+5</div>
       </div>
       {done&&<div style={{textAlign:'center',marginTop:10,fontSize:13,color:'#34d399',fontWeight:700,animation:'none'}}>✨ Nice! That's how it works! Points added to your total.</div>}
     </div>
