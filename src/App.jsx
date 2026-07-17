@@ -35,7 +35,7 @@ const BASE_SHOP_ITEMS = [
   {id:'s4',name:'1 hour extra screen time',   emoji:'🎮',cost:80, desc:"Level up your gaming session!"},
   {id:'s5',name:'Choose dinner for the night',emoji:'🍕',cost:100,desc:"You're the chef of decisions!"},
   {id:'s6',name:'Assign a chore to someone',  emoji:'👑',cost:150,desc:"Delegate like a boss!"},
-  {id:'s7',name:'Streak Saver',               emoji:'🛡️',cost:75, desc:"Restore a broken streak instantly!",streakSaver:true},
+  {id:'s7',name:'Streak Saver',               emoji:'🛡️',cost:25, desc:"Restore a broken streak — stores in your inventory!",streakSaver:true},
   {id:'s8',name:'Family Restaurant Visit',    emoji:'🍽️',cost:500,desc:"The ultimate family outing!",boss:true},
 ];
 const BASE_RECURRING = [
@@ -127,7 +127,7 @@ const AVATAR_DECOS = [
 ];
 const NAV_ITEMS = [
   {id:'profile',icon:'👤'},{id:'main',icon:'🏠'},{id:'shop',icon:'🛍️'},
-  {id:'quests',icon:'🎯'},{id:'social',icon:'💬'},{id:'settings',icon:'⚙️'},
+  {id:'quests',icon:'🏅'},{id:'social',icon:'💬'},{id:'settings',icon:'⚙️'},
 ];
 const FONTS=[
   {id:'f0',name:'System',   css:"'Segoe UI',sans-serif"},
@@ -304,9 +304,23 @@ const getMult=(data,uid)=>{const s=gUS(data,uid),ab=getActiveBst(data),hp=gUP(da
 const getDecoClass=s=>{const d=AVATAR_DECOS.find(x=>x.id===(s?.avatarDeco||'ad0'));return d?.cls||'';};
 const getNameplateGrad=s=>{const n=NAMEPLATES.find(x=>x.id===(s?.nameplate||'np0'));return n?.gradient||null;};
 
+const isSystemRow=c=>{const id=String(c.choreId||'');return id.startsWith('quest_')||id.startsWith('streaksave_');};
+const getSavers=(data,uid)=>(data.streakSavers||{})[uid]||0;
+const dayDiff=(a,b)=>Math.round((new Date(a+'T12:00:00')-new Date(b+'T12:00:00'))/864e5);
+// Returns {lost,missedDate} when exactly one missed day broke a streak of 2+, else null
+const getBrokenStreak=(completions,userId)=>{
+  const dates=[...new Set(completions.filter(c=>c.userId===userId).map(c=>c.date))].sort().reverse();
+  if(!dates.length)return null;
+  if(dayDiff(getToday(),dates[0])!==2)return null;
+  let n=1;
+  for(let i=1;i<dates.length;i++){if(dayDiff(dates[i-1],dates[i])===1)n++;else break;}
+  if(n<2)return null;
+  const m=new Date(dates[0]+'T12:00:00');m.setDate(m.getDate()+1);
+  return{lost:n,missedDate:m.toISOString().split('T')[0]};
+};
 const compStats=(completions,redemptions,data)=>{
   const ws=getWkSt(),tw=get2WA(),ms=getMoSt(),out={};
-  getFam(data).forEach(u=>{const mc=completions.filter(c=>c.userId===u.id);const rp=(redemptions||[]).filter(r=>r.userId===u.id).reduce((s,r)=>s+r.cost,0);const tp=mc.reduce((s,c)=>s+c.points,0);out[u.id]={totalTasks:mc.length,totalPoints:tp,weeklyPoints:mc.filter(c=>c.date>=ws).reduce((s,c)=>s+c.points,0),biweeklyPoints:mc.filter(c=>c.date>=tw).reduce((s,c)=>s+c.points,0),monthlyPoints:mc.filter(c=>c.date>=ms).reduce((s,c)=>s+c.points,0),redeemedPoints:rp,availablePoints:tp-rp};});
+  getFam(data).forEach(u=>{const mc=completions.filter(c=>c.userId===u.id);const rp=(redemptions||[]).filter(r=>r.userId===u.id).reduce((s,r)=>s+r.cost,0);const tp=mc.reduce((s,c)=>s+c.points,0);out[u.id]={totalTasks:mc.filter(c=>!isSystemRow(c)).length,totalPoints:tp,weeklyPoints:mc.filter(c=>c.date>=ws).reduce((s,c)=>s+c.points,0),biweeklyPoints:mc.filter(c=>c.date>=tw).reduce((s,c)=>s+c.points,0),monthlyPoints:mc.filter(c=>c.date>=ms).reduce((s,c)=>s+c.points,0),redeemedPoints:rp,availablePoints:tp-rp};});
   return out;
 };
 const findWinner=(completions,start,end,data)=>{
@@ -401,7 +415,7 @@ function Sidebar({page,setPage,onClose,user,myStats,onLogout,profilePics,ownDeco
       <div onClick={onClose} style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.6)'}}/>
       <div style={{position:'absolute',left:0,top:0,bottom:0,width:264,background:'linear-gradient(180deg,#1e1b4b,#312e81)',padding:'14px 14px 18px',display:'flex',flexDirection:'column',gap:6,zIndex:901}}>
         <div style={{textAlign:'center',fontSize:11,fontWeight:800,opacity:.4,letterSpacing:3,marginBottom:10}}>MENU</div>
-        {[{id:'profile',label:'👤 My Profile'},{id:'main',label:'🏠 Main'},{id:'shop',label:'🛍️ Shop'},{id:'quests',label:'🎯 Quests'},{id:'social',label:'💬 Social'},{id:'wishlist',label:'🌟 Wishlist'}].map(item=>(
+        {[{id:'profile',label:'👤 My Profile'},{id:'main',label:'🏠 Main'},{id:'shop',label:'🛍️ Shop'},{id:'quests',label:'🏅 Achievements'},{id:'social',label:'💬 Social'},{id:'wishlist',label:'🌟 Wishlist'}].map(item=>(
           <button key={item.id} onClick={()=>setPage(item.id)} style={{background:page===item.id?'rgba(255,255,255,0.15)':'transparent',border:'1px solid rgba(255,255,255,0.08)',borderRadius:12,padding:'13px 18px',color:'white',fontSize:15,fontWeight:page===item.id?700:400,cursor:'pointer',textAlign:'left',transition:'all .15s'}}>{item.label}</button>
         ))}
         <div style={{marginTop:'auto',display:'flex',flexDirection:'column',gap:6}}>
@@ -418,15 +432,37 @@ function Sidebar({page,setPage,onClose,user,myStats,onLogout,profilePics,ownDeco
   );
 }
 
+// ── PinnedSidebar ───────────────────────────────────────────
+function PinnedSidebar({page,setPage,user,myStats,onLogout,profilePics,ownDecoClass}){
+  const tier=getTier(myStats.totalTasks);
+  const btn=(active,extra={})=>({background:active?'rgba(255,255,255,0.15)':'transparent',border:'1px solid rgba(255,255,255,0.08)',borderRadius:12,padding:'11px 16px',color:'white',fontSize:14,fontWeight:active?700:400,cursor:'pointer',textAlign:'left',...extra});
+  return(
+    <div style={{width:214,flexShrink:0,background:'rgba(0,0,0,0.22)',borderRight:'1px solid rgba(255,255,255,0.08)',padding:'12px 10px',display:'flex',flexDirection:'column',gap:5,overflowY:'auto'}}>
+      {[{id:'profile',label:'👤 My Profile'},{id:'main',label:'🏠 Main'},{id:'shop',label:'🛍️ Shop'},{id:'quests',label:'🏅 Achievements'},{id:'social',label:'💬 Social'},{id:'wishlist',label:'🌟 Wishlist'}].map(item=>(
+        <button key={item.id} onClick={()=>setPage(item.id)} style={btn(page===item.id)}>{item.label}</button>
+      ))}
+      <div style={{marginTop:'auto',display:'flex',flexDirection:'column',gap:5}}>
+        <button onClick={()=>setPage('settings')} style={btn(page==='settings',{color:'rgba(255,255,255,0.75)'})}>⚙️ Settings</button>
+        {user.admin&&<button onClick={()=>setPage('console')} style={btn(page==='console',{color:'#a5b4fc',border:'1px solid rgba(129,140,248,0.22)'})}>🔧 Console</button>}
+        <div style={{display:'flex',alignItems:'center',gap:9,padding:'9px 12px',background:'rgba(255,255,255,0.05)',borderRadius:12,marginTop:4}}>
+          <Avatar user={user} size={32} imgSrc={(profilePics||{})[user.id]||null} decoClass={ownDecoClass}/>
+          <div style={{minWidth:0}}><div style={{fontWeight:700,fontSize:13}}>{user.name}</div><div style={{fontSize:10,color:tier.color}}>{tier.emoji} {tier.name}</div></div>
+        </div>
+        <button onClick={onLogout} style={{background:'rgba(239,68,68,0.18)',border:'1px solid rgba(239,68,68,0.28)',borderRadius:10,padding:9,color:'#fca5a5',cursor:'pointer',fontWeight:600,fontSize:13}}>Logout</button>
+      </div>
+    </div>
+  );
+}
+
 // ── Header ──────────────────────────────────────────────────
-function Header({onMenu,user,myStats,setPage,title,profilePics,settings,page,activeBooster,ownDecoClass,syncStatus,streak}){
+function Header({onMenu,user,myStats,setPage,title,profilePics,settings,page,activeBooster,ownDecoClass,syncStatus,streak,hideMenu}){
   const tier=getTier(myStats.totalTasks);
   const navItems=[...NAV_ITEMS,...(user.admin?[{id:'console',icon:'🔧'}]:[])];
   const bLeft=activeBooster?Math.max(0,Math.ceil((activeBooster.expiresAt-Date.now())/864e5)):0;
   const syncDot=syncStatus==='saving'?{bg:'rgba(251,191,36,0.2)',border:'rgba(251,191,36,0.5)',color:'#fbbf24',label:'Syncing…'}:syncStatus==='error'?{bg:'rgba(239,68,68,0.2)',border:'rgba(239,68,68,0.4)',color:'#f87171',label:'Sync error'}:{bg:'rgba(52,211,153,0.15)',border:'rgba(52,211,153,0.35)',color:'#34d399',label:'Synced'};
   return(
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',borderBottom:'1px solid rgba(255,255,255,0.08)',flexShrink:0,position:'relative',gap:8}}>
-      <HamBtn onClick={onMenu}/>
+      {!hideMenu&&<HamBtn onClick={onMenu}/>}
       {settings?.showQuickNav?(
         <div style={{position:'absolute',left:'50%',transform:'translateX(-50%)',display:'flex',gap:5}}>
           {navItems.map(item=>{const active=page===item.id;return(
@@ -572,6 +608,11 @@ function ShopContent({myStats,redemptions,user,onRedeem,onPurchaseThemeItem,onPu
       {shopMsg&&<div style={{background:'rgba(52,211,153,0.14)',border:'1px solid rgba(52,211,153,0.3)',borderRadius:12,padding:'12px 16px',marginBottom:16,color:'#34d399',fontWeight:600}}>{shopMsg}</div>}
 
       {tab==='rewards'&&<>
+        {!isGuest&&<div style={{...glass(),padding:'12px 16px',marginBottom:16,display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+          <div style={{fontSize:24}}>🎒</div>
+          <div style={{flex:1,minWidth:120}}><div style={{fontWeight:700,fontSize:14}}>Inventory</div><div style={{fontSize:11,opacity:.5,marginTop:1}}>Consumable items you own — buy extras to stock up</div></div>
+          <div style={{background:'rgba(251,146,60,0.14)',border:'1px solid rgba(251,146,60,0.35)',borderRadius:10,padding:'6px 12px',fontSize:13,fontWeight:700,color:'#fb923c',whiteSpace:'nowrap'}}>🛡️ {getSavers(data,user.id)} Streak Saver{getSavers(data,user.id)===1?'':'s'}</div>
+        </div>}
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(175px,1fr))',gap:14,marginBottom:28}}>
           {allItems.map(item=>{const can=!isGuest&&myStats.availablePoints>=item.cost;return(
             <div key={item.id} style={{background:item.boss?'linear-gradient(135deg,rgba(168,85,247,0.18),rgba(236,72,153,0.14))':'rgba(255,255,255,0.05)',border:`1px solid ${item.boss?'rgba(168,85,247,0.4)':'rgba(255,255,255,0.08)'}`,borderRadius:16,padding:18,display:'flex',flexDirection:'column',gap:10,boxShadow:item.boss?'0 0 28px rgba(168,85,247,0.18)':'none'}}>
@@ -686,6 +727,12 @@ function SettingsContent({user,data,updateSettings,gotoShop}){
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
           <div style={{fontSize:13,opacity:.7}}>Show tab icons in header for quick switching</div>
           <button onClick={()=>set({showQuickNav:!s.showQuickNav})} style={{background:s.showQuickNav?'rgba(52,211,153,0.18)':'rgba(255,255,255,0.06)',border:`1px solid ${s.showQuickNav?'rgba(52,211,153,0.4)':'rgba(255,255,255,0.15)'}`,borderRadius:10,padding:'8px 18px',color:s.showQuickNav?'#34d399':'white',cursor:'pointer',fontWeight:700,fontSize:13}}>{s.showQuickNav?'✓ Enabled':'Disabled'}</button>
+        </div>
+      </Card>
+      <Card title="📌 Pinned Sidebar" sub="Keep the menu open on the left instead of the hamburger" style={{marginBottom:14}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10}}>
+          <div style={{fontSize:13,opacity:.7}}>On by default on computers, off on phones</div>
+          <button onClick={()=>set({pinSidebar:!(s.pinSidebar??(window.innerWidth>=700))})} style={{background:(s.pinSidebar??(window.innerWidth>=700))?'rgba(52,211,153,0.18)':'rgba(255,255,255,0.06)',border:`1px solid ${(s.pinSidebar??(window.innerWidth>=700))?'rgba(52,211,153,0.4)':'rgba(255,255,255,0.15)'}`,borderRadius:10,padding:'8px 18px',color:(s.pinSidebar??(window.innerWidth>=700))?'#34d399':'white',cursor:'pointer',fontWeight:700,fontSize:13,flexShrink:0,whiteSpace:'nowrap'}}>{(s.pinSidebar??(window.innerWidth>=700))?'✓ Pinned':'Hidden'}</button>
         </div>
       </Card>
       <Card title="✍️ Font" style={{marginBottom:14}}><div style={{display:'flex',gap:8,flexWrap:'wrap'}}>{FONTS.map(f=><SelBtn key={f.id} active={s.font===f.id} onClick={()=>set({font:f.id})} style={{fontFamily:f.css}}>{f.name}</SelBtn>)}</div></Card>
@@ -840,7 +887,7 @@ function ConsolePage({data,update}){
   const ar=()=>{if(!newR.name.trim()||!newR.points)return;update(prev=>({...prev,recurringTasks:[...prev.recurringTasks,{id:`r_${Date.now()}`,name:newR.name.trim(),points:Number(newR.points),emoji:newR.emoji||'🔄',dayOfMonth:Math.min(31,Math.max(1,Number(newR.dayOfMonth)||1)),frequency:newR.frequency||'monthly'}]}));setNewR({name:'',points:'',emoji:'🔄',dayOfMonth:'1',frequency:'monthly'});};
   const dr=id=>update(prev=>({...prev,recurringTasks:prev.recurringTasks.filter(t=>t.id!==id)}));
   const resetAv=uid=>update(prev=>({...prev,profilePics:{...(prev.profilePics||{}),[uid]:null}}));
-  const resetSt=uid=>update(prev=>({...prev,completions:prev.completions.filter(c=>c.userId!==uid),redemptions:prev.redemptions.filter(r=>r.userId!==uid),purchases:{...(prev.purchases||{}),[uid]:[]},wins:{...(prev.wins||{}),[uid]:{weekly:0,monthly:0}}}));
+  const resetSt=uid=>update(prev=>({...prev,completions:prev.completions.filter(c=>c.userId!==uid),redemptions:prev.redemptions.filter(r=>r.userId!==uid),purchases:{...(prev.purchases||{}),[uid]:[]},wins:{...(prev.wins||{}),[uid]:{weekly:0,monthly:0}},userSettings:{...(prev.userSettings||{}),[uid]:{}},questClaims:{...(prev.questClaims||{}),[uid]:{}},achievementsEarned:{...(prev.achievementsEarned||{}),[uid]:{}},chat:(prev.chat||[]).filter(m=>m.userId!==uid)}));
   const delU=uid=>update(prev=>({...prev,dynamicUsers:(prev.dynamicUsers||[]).filter(u=>u.id!==uid),completions:prev.completions.filter(c=>c.userId!==uid),redemptions:prev.redemptions.filter(r=>r.userId!==uid)}));
   const createU=()=>{if(!nuForm.name.trim())return;const n=nuForm.name.trim(),id=`u_${n.toLowerCase().replace(/\s+/g,'_')}_${Date.now()}`,pw=n.toLowerCase().replace(/\s+/g,'')+`123`;update(prev=>({...prev,dynamicUsers:[...(prev.dynamicUsers||[]),{id,name:n,color:nuForm.color,password:pw}]}));setNuForm({name:'',color:'#818cf8'});};
   const handleBgUpload=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>setBgData(ev.target.result);r.readAsDataURL(f);};
@@ -963,7 +1010,7 @@ function ConsolePage({data,update}){
                 </div>
                 <div style={{display:'flex',gap:5,marginBottom:6}}>
                   {isAsk(u.id,'avt')?<button onClick={()=>{resetAv(u.id);clrConf();}} style={{flex:1,background:'rgba(239,68,68,0.3)',border:'none',borderRadius:8,padding:'6px',color:'white',cursor:'pointer',fontSize:12,fontWeight:700}}>Confirm?</button>:<button onClick={e=>{e.stopPropagation();ask(u.id,'avt');}} style={{flex:1,background:'rgba(239,68,68,0.12)',border:'1px solid rgba(239,68,68,0.25)',borderRadius:8,padding:'5px',color:'#f87171',cursor:'pointer',fontSize:11}}>Reset Photo</button>}
-                  {isAsk(u.id,'sts')?<button onClick={()=>{resetSt(u.id);clrConf();}} style={{flex:1,background:'rgba(239,68,68,0.3)',border:'none',borderRadius:8,padding:'6px',color:'white',cursor:'pointer',fontSize:12,fontWeight:700}}>Confirm?</button>:<button onClick={e=>{e.stopPropagation();ask(u.id,'sts');}} style={{flex:1,background:'rgba(239,68,68,0.12)',border:'1px solid rgba(239,68,68,0.25)',borderRadius:8,padding:'5px',color:'#f87171',cursor:'pointer',fontSize:11}}>Reset Stats</button>}
+                  {isAsk(u.id,'sts')?<button onClick={()=>{resetSt(u.id);clrConf();}} style={{flex:1,background:'rgba(239,68,68,0.3)',border:'none',borderRadius:8,padding:'6px',color:'white',cursor:'pointer',fontSize:12,fontWeight:700}}>Confirm?</button>:<button onClick={e=>{e.stopPropagation();ask(u.id,'sts');}} style={{flex:1,background:'rgba(239,68,68,0.12)',border:'1px solid rgba(239,68,68,0.25)',borderRadius:8,padding:'5px',color:'#f87171',cursor:'pointer',fontSize:11}}>Reset All</button>}
                   {isDyn&&(isAsk(u.id,'del')?<button onClick={()=>{delU(u.id);clrConf();}} style={{background:'rgba(239,68,68,0.3)',border:'none',borderRadius:8,padding:'6px 8px',color:'white',cursor:'pointer',fontSize:12,fontWeight:700,flexShrink:0}}>Confirm?</button>:<button onClick={e=>{e.stopPropagation();ask(u.id,'del');}} style={{background:'rgba(239,68,68,0.18)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:8,padding:'5px 8px',color:'#f87171',cursor:'pointer',fontSize:11,flexShrink:0}}>✕</button>)}
                 </div>
                 <div style={{fontSize:9,opacity:.35}}>Login: {u.name.toLowerCase()} / {u.password}</div>
@@ -1091,7 +1138,7 @@ function OnboardingModal({ user, data, onDone, onPurchaseThemeItem }) {
   };
 
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyviewport:'center', zIndex:3000, padding:16, overflowY:'auto', WebkitOverflowScrolling:'touch' }}>
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:3000, padding:16, overflowY:'auto', WebkitOverflowScrolling:'touch' }}>
       <div style={{ background:'linear-gradient(135deg,rgba(15,12,41,.98),rgba(48,43,99,.98))', border:'1px solid rgba(255,255,255,0.12)', borderRadius:24, padding: isMob ? '24px 20px' : '36px 40px', width:'100%', maxWidth:480, position:'relative', margin:'auto' }}>
         <div style={{ display:'flex', justifyContent:'center', gap:6, marginBottom:24 }}>
           {ONBOARDING_STEPS.map((_,i) => (
@@ -1179,7 +1226,8 @@ function AchievementsGrid({user,data,stats,streak}){
 
 // ── Quests Page ───────────────────────────────────────────────
 function QuestsPage({user,data,update,stats,isGuest,allChores}){
-  const c=data.completions,claims=(data.questClaims||{})[user.id]||{};
+  const [tab,setTab]=useState('achievements');
+  const c=data.completions.filter(x=>!isSystemRow(x)),claims=(data.questClaims||{})[user.id]||{};
   const weekKey=getWkSt();
   const claimQuest=(id,pts)=>{
     if(isGuest)return;
@@ -1193,9 +1241,18 @@ function QuestsPage({user,data,update,stats,isGuest,allChores}){
 
   return(
     <div style={{padding:20,maxWidth:680,margin:'0 auto',overflowY:'auto',WebkitOverflowScrolling:'touch'}}>
-      <div style={{fontSize:22,fontWeight:800,marginBottom:4}}>🎯 Quests</div>
-      <div style={{opacity:.5,fontSize:13,marginBottom:20}}>Weekly challenges — reset every Sunday! Complete them for bonus points.</div>
+      <div style={{fontSize:22,fontWeight:800,marginBottom:4}}>🏅 Achievements</div>
+      <div style={{opacity:.5,fontSize:13,marginBottom:16}}>Badges you've earned — plus weekly quests for bonus points.</div>
 
+      <div style={{display:'flex',gap:8,marginBottom:18}}>
+        {[['achievements','🏅 Badges'],['quests','🎯 Quests']].map(([t,l])=>(
+          <button key={t} onClick={()=>setTab(t)} style={{padding:'8px 18px',borderRadius:10,background:tab===t?'rgba(129,140,248,0.25)':'rgba(255,255,255,0.06)',border:`1px solid ${tab===t?'#818cf8':'rgba(255,255,255,0.1)'}`,color:'white',cursor:'pointer',fontWeight:tab===t?700:400,fontSize:13}}>{l}</button>
+        ))}
+      </div>
+
+      {tab==='achievements'&&<AchievementsGrid user={user} data={data} stats={stats} streak={calcStreak(data.completions,user.id)}/>}
+
+      {tab==='quests'&&<>
       <div style={{fontWeight:700,fontSize:16,marginBottom:12}}>👤 Personal Challenges</div>
       <div style={{display:'flex',flexDirection:'column',gap:10,marginBottom:28}}>
         {PERSONAL_QUESTS.map(q=>{
@@ -1247,6 +1304,7 @@ function QuestsPage({user,data,update,stats,isGuest,allChores}){
           );
         })}
       </div>
+      </>}
     </div>
   );
 }
@@ -1265,7 +1323,7 @@ function SocialPage({user,data,update,isGuest,profilePics,dynUsers,userSettingsM
     setMsg('');
   };
 
-  const recentActivity=[...data.completions].reverse().slice(0,15).map(c=>{
+  const recentActivity=[...data.completions].filter(c=>!isSystemRow(c)).reverse().slice(0,15).map(c=>{
     const u=getUser(c.userId,dynUsers);
     const ch=[...BASE_CHORES,...data.customChores,...(data.recurringTasks||[])].find(x=>x.id===c.choreId)||{name:'a chore',emoji:'✅'};
     return{...c,userName:u.name,userColor:u.color,choreName:ch.name,choreEmoji:ch.emoji};
@@ -1468,6 +1526,44 @@ function BoardPanel({user,isGuest,lbMode,setLbMode,lb,stats,medals,setViewProfil
   );
 }
 
+function StreakSaveModal({broken,savers,points,onUse,onClose}){
+  const canBuy=savers<1&&points>=15;
+  const able=savers>0||canBuy;
+  return(
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.85)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:2200,padding:16}}>
+      <div style={{background:'linear-gradient(135deg,rgba(15,12,41,.97),rgba(48,43,99,.97))',border:'1px solid rgba(251,146,60,0.5)',borderRadius:22,padding:'30px 26px',textAlign:'center',maxWidth:330,width:'100%',boxShadow:'0 0 60px rgba(251,146,60,0.25)'}}>
+        <div style={{fontSize:56,lineHeight:1}}>💔</div>
+        <div style={{fontSize:20,fontWeight:800,marginTop:12}}>Your {broken.lost}-day streak broke!</div>
+        <div style={{fontSize:13,opacity:.65,marginTop:8,lineHeight:1.6}}>You missed {broken.missedDate}. Use a 🛡️ Streak Saver to restore it?</div>
+        <div style={{fontSize:12,marginTop:12,color:savers>0?'#34d399':'#94a3b8'}}>You own {savers} Streak Saver{savers===1?'':'s'}</div>
+        <button onClick={able?onUse:undefined} disabled={!able} style={{width:'100%',marginTop:16,background:able?'linear-gradient(135deg,#fb923c,#ea580c)':'rgba(255,255,255,0.06)',border:'none',borderRadius:12,padding:'12px',color:able?'white':'#4b5563',fontWeight:800,fontSize:15,cursor:able?'pointer':'not-allowed'}}>
+          {savers>0?'Use Saver 🛡️':canBuy?'Buy & Use — 15 pts':`Need ${15-points} more pts`}
+        </button>
+        <button onClick={onClose} style={{width:'100%',marginTop:8,background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:12,padding:'10px',color:'rgba(255,255,255,0.6)',cursor:'pointer',fontWeight:600,fontSize:14}}>No thanks</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Achievement Toast ─────────────────────────────────────────
+function AchToast({toasts}){
+  if(!toasts.length)return null;
+  return(
+    <div style={{position:'fixed',right:16,bottom:16,zIndex:2500,display:'flex',flexDirection:'column',gap:8,pointerEvents:'none'}}>
+      {toasts.map(t=>{const r=RARITIES[t.ach.rarity]||RARITIES.common;return(
+        <div key={t.key} style={{background:'linear-gradient(135deg,rgba(15,12,41,.97),rgba(48,43,99,.97))',border:`1px solid ${r.color}`,boxShadow:`0 6px 28px ${r.color}44`,borderRadius:14,padding:'12px 16px',display:'flex',alignItems:'center',gap:12,minWidth:220,maxWidth:280}}>
+          <div style={{fontSize:30,flexShrink:0}}>{t.ach.emoji}</div>
+          <div>
+            <div style={{fontSize:9,letterSpacing:2,fontWeight:800,color:r.color,textTransform:'uppercase'}}>{r.label} unlocked</div>
+            <div style={{fontWeight:800,fontSize:14,marginTop:2}}>{t.ach.name}</div>
+            <div style={{fontSize:11,opacity:.6,marginTop:1}}>{t.ach.desc}</div>
+          </div>
+        </div>
+      );})}
+    </div>
+  );
+}
+
 // ── App ──────────────────────────────────────────────────────
 export default function App(){
   const [data,setData]=useState(null);
@@ -1489,8 +1585,11 @@ export default function App(){
   const [previewMode,setPreviewMode]=useState(null);
   const [showOnboarding,setShowOnboarding]=useState(false);
   const [syncStatus,setSyncStatus]=useState('ok'); // 'ok' | 'saving' | 'error'
+  const [toasts,setToasts]=useState([]);
   const prevTiers=useRef({});
   const pId=useRef(0);
+  const seenAch=useRef({});
+  const toastId=useRef(0);
   const lastSynced=useRef(null);
   const isWriting=useRef(false);
 
@@ -1557,6 +1656,23 @@ export default function App(){
     const cur=getTier(stats[user.id]?.totalTasks||0),prev=prevTiers.current[user.id];
     if(prev&&prev.name!==cur.name&&cur.min>prev.min)setTierPopup(cur);
     prevTiers.current[user.id]=cur;
+  },[data,user]);
+
+  useEffect(()=>{
+    if(!data||!user||user.guest)return;
+    const st=compStats(data.completions,data.redemptions,data)[user.id]||{totalTasks:0,totalPoints:0};
+    const streak=calcStreak(data.completions,user.id);
+    const redCount=(data.redemptions||[]).filter(r=>r.userId===user.id).length;
+    const extra={loggedIn:true,loginStreak:(data.userSettings||{})[user.id]?.loginStreak||1,boostChore:(data.userSettings||{})[user.id]?.earnedBoostChore};
+    const now=ACHIEVEMENTS.filter(a=>{try{return a.check(st,streak,redCount,extra);}catch{return false;}});
+    const prevSet=seenAch.current[user.id];
+    if(!prevSet){seenAch.current[user.id]=new Set(now.map(a=>a.id));return;}
+    const fresh=now.filter(a=>!prevSet.has(a.id));
+    if(!fresh.length)return;
+    fresh.forEach(a=>prevSet.add(a.id));
+    const added=fresh.map(a=>({key:toastId.current++,ach:a}));
+    setToasts(t=>[...t,...added]);
+    setTimeout(()=>setToasts(t=>t.filter(x=>!added.some(n=>n.key===x.key))),4500);
   },[data,user]);
 
   useEffect(()=>{
@@ -1672,6 +1788,7 @@ export default function App(){
   const mult=getMult(data,user.id);
   const ownDecoClass=getDecoClass(settings);
   const userSettingsMap=data.userSettings||{};
+  const pinned=settings.pinSidebar??!isMobile;
 
   const isDoneToday=id=>data.completions.some(c=>c.choreId===id&&c.date===today);
   const whoDidToday=id=>{const c=data.completions.find(x=>x.choreId===id&&x.date===today);return c?getUser(c.userId,dynUsers):null;};
@@ -1682,7 +1799,7 @@ export default function App(){
   const sendNudge=()=>{if(isGuest||!nudge.trim())return;update(prev=>({...prev,announcements:[...prev.announcements,{id:`ann_${Date.now()}`,text:nudge.trim()}]}));setNudge('');};
   const addSugg=()=>{if(isGuest||!sugg.trim())return;update(prev=>({...prev,suggestions:[...prev.suggestions,{id:`sg_${Date.now()}`,name:sugg.trim(),suggestedBy:user.id,suggestedByName:user.name,votes:{},createdAt:today,status:'pending'}]}));setSugg('');};
   const vote=id=>{if(isGuest)return;const val=parseInt(voteVals[id]);if(!val||val<1)return;update(prev=>({...prev,suggestions:prev.suggestions.map(s=>s.id===id?{...s,votes:{...s.votes,[user.id]:val}}:s)}));setVoteVals(p=>({...p,[id]:''}));};
-  const redeem=item=>{if(isGuest||myStats.availablePoints<item.cost){setShopMsg(`Need ${item.cost-myStats.availablePoints} more pts!`);setTimeout(()=>setShopMsg(''),3e3);return;}update(prev=>({...prev,redemptions:[...prev.redemptions,{id:`red_${Date.now()}`,userId:user.id,itemName:item.name,cost:item.cost,date:today}]}));setShopMsg(`🎉 Redeemed: ${item.emoji} ${item.name}!`);setTimeout(()=>setShopMsg(''),4e3);};
+  const redeem=item=>{if(isGuest||myStats.availablePoints<item.cost){setShopMsg(`Need ${item.cost-myStats.availablePoints} more pts!`);setTimeout(()=>setShopMsg(''),3e3);return;}update(prev=>({...prev,redemptions:[...prev.redemptions,{id:`red_${Date.now()}`,userId:user.id,itemName:item.name,cost:item.cost,date:today}],...(item.streakSaver?{streakSavers:{...(prev.streakSavers||{}),[user.id]:getSavers(prev,user.id)+1}}:{})}));setShopMsg(item.streakSaver?`🛡️ Streak Saver added to your inventory!`:`🎉 Redeemed: ${item.emoji} ${item.name}!`);setTimeout(()=>setShopMsg(''),4e3);};
   const purchaseThemeItem=item=>{if(isGuest||myStats.availablePoints<item.cost){setShopMsg(`Need ${item.cost-myStats.availablePoints} more pts!`);setTimeout(()=>setShopMsg(''),3e3);return;}update(prev=>({...prev,redemptions:[...prev.redemptions,{id:`red_${Date.now()}`,userId:user.id,itemName:item.name,cost:item.cost,date:today}],purchases:{...(prev.purchases||{}),[user.id]:[...((prev.purchases||{})[user.id]||[]),item.id]}}));setShopMsg(`🎉 Unlocked: ${item.emoji} ${item.name}! Equip in ⚙️ Settings.`);setTimeout(()=>setShopMsg(''),4e3);};
   const purchaseBooster=item=>{
     if(isGuest||myStats.availablePoints<item.cost)return;
@@ -1702,12 +1819,29 @@ export default function App(){
     update(prev=>({...prev,profilePics:{...(prev.profilePics||{}),[uid]:compressed}}));
   };
   const updateSettings=patch=>update(prev=>({...prev,userSettings:{...(prev.userSettings||{}),[user.id]:{...gUS(prev,user.id),...patch}}}));
+  const broken=isGuest?null:getBrokenStreak(data.completions,user.id);
+  const showStreakPrompt=!!broken&&settings.streakPromptSeen!==broken.missedDate;
+  const useSaver=()=>{
+    if(!broken)return;
+    const have=getSavers(data,user.id);
+    if(have<1&&myStats.availablePoints<15)return;
+    update(prev=>{
+      const had=getSavers(prev,user.id),buying=had<1;
+      return{...prev,
+        streakSavers:{...(prev.streakSavers||{}),[user.id]:buying?had:had-1},
+        redemptions:buying?[...prev.redemptions,{id:`red_${Date.now()}`,userId:user.id,itemName:'Streak Saver',cost:15,date:today}]:prev.redemptions,
+        completions:[...prev.completions,{id:`save_${user.id}_${Date.now()}`,userId:user.id,choreId:`streaksave_${broken.missedDate}`,points:0,date:broken.missedDate}],
+        userSettings:{...(prev.userSettings||{}),[user.id]:{...gUS(prev,user.id),streakPromptSeen:broken.missedDate}},
+      };
+    });
+    setShopMsg(`🛡️ Streak restored — the missed day is covered, keep it going!`);setTimeout(()=>setShopMsg(''),4e3);
+  };
   const lb=getFam(data).slice();
   const pendSuggs=data.suggestions.filter(s=>s.status==='pending');
   const medals=['🥇','🥈','🥉'];
   const doSetPage=p=>{setPage(p);setSidebar(false);};
   const doLogout=()=>{setUser(null);setSidebar(false);setPage('main');};
-  const pageTitles={main:'Family Chore Tracker',shop:'Rewards Shop',profile:'My Profile',console:'Admin Console',wishlist:'Wishlist',settings:'Settings',quests:'Quests',social:'Social'};
+  const pageTitles={main:'Family Chore Tracker',shop:'Rewards Shop',profile:'My Profile',console:'Admin Console',wishlist:'Wishlist',settings:'Settings',quests:'Achievements',social:'Social'};
   const spProps={allChores,recurringTasks:data.recurringTasks,user,isGuest,isDoneToday,whoDidToday,toggleChore,completeRecurring,tc,onAnim:spawnParticles};
   const bpProps={user,isGuest,lbMode,setLbMode,lb,stats,medals,setViewProfile,nudge,setNudge,sendNudge,sugg,setSugg,addSugg,pendingSuggs:pendSuggs,voteVals,setVoteVals,vote,profilePics,userSettingsMap};
   const appStyle={minHeight:'100vh',color:'white',fontFamily:appFont,fontSize:`${appScale}rem`,display:'flex',flexDirection:'column',height:'100vh',overflow:'hidden',...(customBg?{backgroundImage:`url(${customBg.imageData})`,backgroundSize:'cover',backgroundPosition:'center'}:bgEntry?.css?{background:bgEntry.css}:{})};
@@ -1716,15 +1850,19 @@ export default function App(){
     <div className={(!customBg&&bgEntry?.cls)||''} style={appStyle}>
       <style>{GCSS}</style>
       <Particles particles={particles}/>
+      <AchToast toasts={toasts}/>
+      {showStreakPrompt&&<StreakSaveModal broken={broken} savers={getSavers(data,user.id)} points={myStats.availablePoints} onUse={useSaver} onClose={()=>updateSettings({streakPromptSeen:broken.missedDate})}/>}
       {showOnboarding&&<OnboardingModal user={user} data={data} onPurchaseThemeItem={item=>{update(prev=>({...prev,purchases:{...(prev.purchases||{}),[user.id]:[...((prev.purchases||{})[user.id]||[]),item.id]}}));}} onDone={()=>{setShowOnboarding(false);update(prev=>({...prev,userSettings:{...(prev.userSettings||{}),[user.id]:{...gUS(prev,user.id),onboardingDone:true}}}));}}/>}
       {previewMode&&<PreviewOverlay previewMode={previewMode} data={data} user={user} onClose={()=>setPreviewMode(null)} allChores={allChores} recurringTasks={data.recurringTasks} profilePics={profilePics} userSettingsMap={userSettingsMap}/>}
       {tierPopup&&<TierUpModal tier={tierPopup} name={user.name} onClose={()=>setTierPopup(null)}/>}
       {viewProfile&&<ProfileModal userId={viewProfile} stats={stats} onClose={()=>setViewProfile(null)} profilePics={profilePics} dynUsers={dynUsers} userSettingsMap={userSettingsMap}/>}
-      {sidebar&&<Sidebar page={page} setPage={doSetPage} onClose={()=>setSidebar(false)} user={user} myStats={myStats} onLogout={doLogout} profilePics={profilePics} ownDecoClass={ownDecoClass}/>}
+      {sidebar&&!pinned&&<Sidebar page={page} setPage={doSetPage} onClose={()=>setSidebar(false)} user={user} myStats={myStats} onLogout={doLogout} profilePics={profilePics} ownDecoClass={ownDecoClass}/>}
       <Ticker anns={data.announcements}/>
       {isGuest&&<div style={{background:'rgba(148,163,184,0.13)',borderBottom:'1px solid rgba(148,163,184,0.2)',padding:'6px 18px',display:'flex',alignItems:'center',gap:8,fontSize:12,color:'#94a3b8',flexShrink:0}}>👁️ <strong>View-Only</strong> — Log in to earn points!</div>}
-      <Header onMenu={()=>setSidebar(true)} user={user} myStats={myStats} setPage={p=>{setPage(p);setSidebar(false);}} title={pageTitles[page]||''} profilePics={profilePics} settings={settings} page={page} activeBooster={activeBst} ownDecoClass={ownDecoClass} syncStatus={syncStatus} streak={calcStreak(data.completions,user.id)}/>
-      <div style={{flex:1,overflowY:'auto',WebkitOverflowScrolling:'touch'}}>
+      <Header onMenu={()=>setSidebar(true)} user={user} myStats={myStats} setPage={p=>{setPage(p);setSidebar(false);}} title={pageTitles[page]||''} profilePics={profilePics} settings={settings} page={page} activeBooster={activeBst} ownDecoClass={ownDecoClass} syncStatus={syncStatus} streak={calcStreak(data.completions,user.id)} hideMenu={pinned}/>
+      <div style={{flex:1,display:'flex',overflow:'hidden'}}>
+      {pinned&&<PinnedSidebar page={page} setPage={doSetPage} user={user} myStats={myStats} onLogout={doLogout} profilePics={profilePics} ownDecoClass={ownDecoClass}/>}
+      <div style={{flex:1,overflowY:'auto',WebkitOverflowScrolling:'touch',minWidth:0}}>
         {page==='profile'&&(isGuest?<GuestProfile/>:<ProfileContent user={user} myStats={myStats} completions={data.completions} allChores={allChores} recurringTasks={data.recurringTasks} wins={data.wins||{}} profilePics={profilePics} onUploadPic={onUploadPic} userSettingsMap={userSettingsMap}/>)}
         {page==='shop'&&<ShopContent myStats={myStats} redemptions={data.redemptions} user={user} onRedeem={redeem} onPurchaseThemeItem={purchaseThemeItem} onPurchaseBooster={purchaseBooster} shopMsg={shopMsg} isGuest={isGuest} data={data} onPreview={setPreviewMode}/>}
         {page==='settings'&&<SettingsContent user={user} data={data} updateSettings={updateSettings} gotoShop={()=>doSetPage('shop')}/>}
@@ -1749,6 +1887,7 @@ export default function App(){
             <div style={{width:308,overflowY:'auto',flexShrink:0}}><BoardPanel {...bpProps}/></div>
           </div>
         ))}
+      </div>
       </div>
     </div>
   );
