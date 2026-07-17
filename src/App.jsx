@@ -807,7 +807,7 @@ function ThemePreviewSamples({pvTh}){
       </div>
       <div style={{display:'flex',flexDirection:'column',gap:6}}>
         {sampleChores.map((c,i)=>(
-          <ChoreItem key={c.id} chore={c} done={!!pvDone[c.id]} doer={pvDone[c.id]?{id:'alon'}:null}
+          <ChoreItem key={c.id} chore={c} done={!!pvDone[c.id]} doer={pvDone[c.id]?{id:'alon'} : null}
             myId="alon" isGuest={false}
             onToggle={()=>setPvDone(p=>({...p,[c.id]:!p[c.id]}))}
             color="#818cf8" tc={tc} idx={i} onAnim={()=>{}}
@@ -817,6 +817,7 @@ function ThemePreviewSamples({pvTh}){
     </div>
   );
 }
+
 function ConsolePage({data,update}){
   const [ct,setCt]=useState('chores');
   const [editC,setEditC]=useState(null),[editR,setEditR]=useState(null);
@@ -986,25 +987,7 @@ function ConsolePage({data,update}){
           <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:pvTh?14:0}}>
             {THEMES.map(t=><button key={t.id} onClick={()=>setPvTh(t.id===pvTh?null:t.id)} style={{background:pvTh===t.id?'rgba(129,140,248,0.28)':'rgba(255,255,255,0.06)',border:`1px solid ${pvTh===t.id?'#818cf8':'rgba(255,255,255,0.1)'}`,borderRadius:8,padding:'6px 12px',color:'white',cursor:'pointer',fontSize:12,fontWeight:pvTh===t.id?700:400}}>{t.emoji} {t.name}</button>)}
           </div>
-          {pvTh&&(()=>{
-            const [pvDone,setPvDone]=useState({});
-            const tc=TC[pvTh]||TC.th0;
-            const sampleChores=[{id:'pv1',name:'Take out the trash',points:10,emoji:'🗑️'},{id:'pv2',name:'Vacuum living room',points:15,emoji:'🧹'},{id:'pv3',name:'Feed the pets',points:5,emoji:'🐾'}];
-            return(
-              <div>
-                <div style={{fontSize:11,opacity:.5,marginBottom:8}}>Previewing: <strong>{THEMES.find(t=>t.id===pvTh)?.name}</strong> — click tasks to toggle!</div>
-                <div style={{display:'flex',flexDirection:'column',gap:6}}>
-                  {sampleChores.map((c,i)=>(
-                    <ChoreItem key={c.id} chore={c} done={!!pvDone[c.id]} doer={pvDone[c.id]?{id:'alon'}:null} myId="alon" isGuest={false}
-                      onToggle={()=>setPvDone(p=>({...p,[c.id]:!p[c.id]}))}
-                      color="#818cf8" tc={tc} idx={i}
-                      onAnim={()=>{}}
-                    />
-                  ))}
-                </div>
-              </div>
-            );
-          })()}
+          {pvTh&&<ThemePreviewSamples pvTh={pvTh}/>}
         </Card>
         <Card title="🖼️ Background Preview" sub="Click a background to see a full color preview">
           <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:pvBg?14:0}}>
@@ -1108,7 +1091,7 @@ function OnboardingModal({ user, data, onDone, onPurchaseThemeItem }) {
   };
 
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:3000, padding:16, overflowY:'auto', WebkitOverflowScrolling:'touch' }}>
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyviewport:'center', zIndex:3000, padding:16, overflowY:'auto', WebkitOverflowScrolling:'touch' }}>
       <div style={{ background:'linear-gradient(135deg,rgba(15,12,41,.98),rgba(48,43,99,.98))', border:'1px solid rgba(255,255,255,0.12)', borderRadius:24, padding: isMob ? '24px 20px' : '36px 40px', width:'100%', maxWidth:480, position:'relative', margin:'auto' }}>
         <div style={{ display:'flex', justifyContent:'center', gap:6, marginBottom:24 }}>
           {ONBOARDING_STEPS.map((_,i) => (
@@ -1593,12 +1576,20 @@ export default function App(){
 
   if(!user){
     const allFL=getFam(data);
-    const doLogin=()=>{const match=allFL.find(u=>u.name.toLowerCase()===loginForm.u.toLowerCase()&&u.password.toLowerCase()===loginForm.p.toLowerCase());if(match){prevTiers.current[match.id]=getTier(compStats(data.completions,data.redemptions,data)[match.id]?.totalTasks||0);setUser(match);setLoginErr('');}else setLoginErr('Wrong name or password. Try again!');};
+    const doLogin=matchUser=>{
+      const match=matchUser || allFL.find(u=>u.name.toLowerCase()===loginForm.u.toLowerCase()&&u.password.toLowerCase()===loginForm.p.toLowerCase());
+      if(match){
+        prevTiers.current[match.id]=getTier(compStats(data.completions,data.redemptions,data)[match.id]?.totalTasks||0);
+        setUser(match);
+        setLoginErr('');
+        const seen=(data.userSettings||{})[match.id]?.onboardingDone;
+        if(!seen) setShowOnboarding(true);
+      } else {
+        setLoginErr('Wrong name or password. Try again!');
+      }
+    };
     const quickLogin=u=>{
-      prevTiers.current[u.id]=getTier(compStats(data.completions,data.redemptions,data)[u.id]?.totalTasks||0);
-      setUser(u);
-      const seen=(data.userSettings||{})[u.id]?.onboardingDone;
-      if(!seen) setShowOnboarding(true);
+      doLogin(u);
     };
     const isSimple=data.loginMode!=='password';
     const bgStyle={background:'linear-gradient(135deg,#0f0c29 0%,#302b63 50%,#24243e 100%)',minHeight:'100vh',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',fontFamily:"'Segoe UI',sans-serif",padding:'24px 16px',color:'white',overflowY:'auto',WebkitOverflowScrolling:'touch'};
@@ -1653,7 +1644,7 @@ export default function App(){
             <input value={loginForm.u} onChange={e=>setLoginForm(f=>({...f,u:e.target.value}))} onKeyDown={e=>e.key==='Enter'&&doLogin()} placeholder="Your name" style={{background:'rgba(255,255,255,0.08)',border:'1px solid rgba(255,255,255,0.15)',borderRadius:12,padding:'12px 16px',color:'white',fontSize:15,outline:'none',boxSizing:'border-box',width:'100%'}}/>
             <input type="password" value={loginForm.p} onChange={e=>setLoginForm(f=>({...f,p:e.target.value}))} onKeyDown={e=>e.key==='Enter'&&doLogin()} placeholder="Password" style={{background:'rgba(255,255,255,0.08)',border:'1px solid rgba(255,255,255,0.15)',borderRadius:12,padding:'12px 16px',color:'white',fontSize:15,outline:'none',boxSizing:'border-box',width:'100%'}}/>
             {loginErr&&<div style={{color:'#f87171',fontSize:13}}>{loginErr}</div>}
-            <button onClick={doLogin} style={{background:'linear-gradient(135deg,#818cf8,#6366f1)',border:'none',borderRadius:12,padding:14,color:'white',fontSize:16,fontWeight:700,cursor:'pointer',marginTop:4}}>Let's Go! 🚀</button>
+            <button onClick={() => doLogin()} style={{background:'linear-gradient(135deg,#818cf8,#6366f1)',border:'none',borderRadius:12,padding:14,color:'white',fontSize:16,fontWeight:700,cursor:'pointer',marginTop:4}}>Let's Go! 🚀</button>
             <div style={{display:'flex',alignItems:'center',gap:10}}><div style={{flex:1,height:1,background:'rgba(255,255,255,0.1)'}}/><div style={{fontSize:12,opacity:.4}}>or</div><div style={{flex:1,height:1,background:'rgba(255,255,255,0.1)'}}/></div>
             <button onClick={()=>setUser(GUEST)} style={{background:'rgba(148,163,184,0.1)',border:'1px solid rgba(148,163,184,0.22)',borderRadius:12,padding:12,color:'#94a3b8',fontSize:14,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>👁️ View as Guest <span style={{fontSize:11,opacity:.55}}>(read-only)</span></button>
           </div>
